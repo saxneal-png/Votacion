@@ -1,7 +1,7 @@
 # Guía de Instalación y Documentación Técnica
 ## Portal de Votación — Consejo Local SLEP
 
-**Desarrollado por:** Servicio Local de Educación Pública Colchagua — Subdirección de Gestión Territorial
+**Desarrollado por:** Servicio Local de Educación Pública — Subdirección de Gestión Territorial
 
 ---
 
@@ -425,7 +425,7 @@ Estos son los endpoints que la UI llama. El backend real del SLEP debe implement
 { "rut": "12345678-5", "email": "director@slep.cl" }
 
 // 200 OK
-{ "user": { "fullName": "Carlos Muñoz Reyes", "organization": "SLEP Colchagua", "estamento": "directivos" } }
+{ "user": { "fullName": "Carlos Muñoz Reyes", "organization": "SLEP Ejemplo", "estamento": "directivos" } }
 
 // 401
 { "message": "No encontramos una coincidencia valida para el RUT y correo ingresados." }
@@ -547,7 +547,7 @@ Cuando el SLEP implemente su backend, el reemplazo se hace en la capa servidor d
 ```typescript
 // src/lib/real-api.ts  (reemplaza mock-api.ts)
 export async function verifyUserCredentials(rut: string, email: string) {
-  const res = await fetch('https://api.slep-colchagua.cl/auth/verify', {
+  const res = await fetch('https://api.slep-ejemplo.cl/auth/verify', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ rut, email }),
@@ -709,4 +709,4 @@ npm run test:e2e:ui      # Tests E2E con UI interactiva
 ---
 
 *Portal de Votación — Consejo Local SLEP | Código libre institucional*
-*Servicio Local de Educación Pública Colchagua — Subdirección de Gestión Territorial*
+*Servicio Local de Educación Pública — Subdirección de Gestión Territorial*

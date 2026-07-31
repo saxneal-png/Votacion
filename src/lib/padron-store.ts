@@ -754,37 +754,56 @@ export async function getPadronRecordsAsync({
   rbd?: string;
 } = {}): Promise<{ records: PadronRecord[]; total: number; quorums: QuorumEstamentoStatus[]; schools: SchoolFilterOption[] }> {
   try {
-    let query = supabaseAdmin
-      .from('bd_padron')
-      .select('*')
-      .order('created_at', { ascending: false });
+    const PAGE_SIZE = 1000;
+    let allRows: Record<string, unknown>[] = [];
+    let page = 0;
+    let hasMore = true;
 
-    if (estamento && estamento !== 'ALL') {
-      query = query.eq('estamento', estamento.toUpperCase());
-    }
-    if (rbd && rbd !== 'ALL') {
-      query = query.eq('rbd_establecimiento', rbd);
-    }
-    if (search) {
-      const q = search.trim();
-      query = query.or(
-        `rut_votante.ilike.%${q}%,nombre_completo.ilike.%${q}%,nombre_establecimiento.ilike.%${q}%`,
-      );
+    while (hasMore) {
+      let query = supabaseAdmin
+        .from('bd_padron')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (estamento && estamento !== 'ALL') {
+        query = query.eq('estamento', estamento.toUpperCase());
+      }
+      if (rbd && rbd !== 'ALL') {
+        query = query.eq('rbd_establecimiento', rbd);
+      }
+      if (search) {
+        const q = search.trim();
+        query = query.or(
+          `rut_votante.ilike.%${q}%,nombre_completo.ilike.%${q}%,nombre_establecimiento.ilike.%${q}%`,
+        );
+      }
+
+      query = query.range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
+
+      const { data, error } = await query;
+
+      if (error) {
+        console.error('[SUPABASE] Error leyendo bd_padron:', error.message);
+        break;
+      }
+
+      if (!data || data.length === 0) {
+        hasMore = false;
+      } else {
+        allRows = allRows.concat(data as Record<string, unknown>[]);
+        if (data.length < PAGE_SIZE) {
+          hasMore = false;
+        } else {
+          page++;
+        }
+      }
     }
 
-    const { data, error } = await query;
-
-    if (error) {
-      console.error('[SUPABASE] Error leyendo bd_padron:', error.message);
+    if (allRows.length === 0) {
       return getPadronRecords({ search, estamento, rbd });
     }
 
-    // Si Supabase no tiene datos, retornar los de demo en memoria
-    if (!data || data.length === 0) {
-      return getPadronRecords({ search, estamento, rbd });
-    }
-
-    const records = data.map((item) => mapRowToPadronRecord(item as Record<string, unknown>));
+    const records = allRows.map((item) => mapRowToPadronRecord(item));
     return {
       records,
       total: records.length,
@@ -897,9 +916,9 @@ export async function processPadronExcelBufferAsync(buffer: Buffer): Promise<Exc
   // Procesar el Excel usando la función síncrona (que agrega a padronStore en memoria)
   const result = processPadronExcelBuffer(buffer);
 
-  // Sincronizar los registros nuevos a Supabase
+  // Sincronizar los registros nuevos a Supabase en lotes
   if (result.registrosInsertados > 0) {
-    const newRecords = padronStore.slice(0, result.registrosInsertados);
+    const newRecords = padronStore.slice(padronStore.length - result.registrosInsertados);
     const rows = newRecords.map((r) => ({
       rut_votante: r.rutVotante,
       formatted_rut_votante: r.formattedRutVotante,
@@ -916,14 +935,18 @@ export async function processPadronExcelBufferAsync(buffer: Buffer): Promise<Exc
     }));
 
     try {
-      const { error } = await supabaseAdmin
-        .from('bd_padron')
-        .insert(rows);
+      const BATCH_SIZE = 500;
+      for (let i = 0; i < rows.length; i += BATCH_SIZE) {
+        const batch = rows.slice(i, i + BATCH_SIZE);
+        const { error } = await supabaseAdmin
+          .from('bd_padron')
+          .insert(batch);
 
-      if (error) {
-        console.error('[SUPABASE] Error en carga masiva Excel a bd_padron:', error.message);
-      } else {
-        console.log(`[SUPABASE] ${result.registrosInsertados} registros cargados en bd_padron.`);
+        if (error) {
+          console.error(`[SUPABASE] Error en carga masiva Excel a bd_padron (Lote ${Math.floor(i / BATCH_SIZE) + 1}):`, error.message);
+        } else {
+          console.log(`[SUPABASE] Lote de ${batch.length} registros cargados en bd_padron (${i + batch.length}/${result.registrosInsertados}).`);
+        }
       }
     } catch (err) {
       console.error('[SUPABASE] Excepción en carga masiva:', err);

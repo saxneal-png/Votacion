@@ -1,6 +1,6 @@
-# Portal de Votación — SLEP COLCHAGUA
+# Portal de Votación — Consejo Local SLEP
 
-Portal web institucional para la emision de votos del Consejo Local del Servicio Local de Educacion Publica (SLEP) COLCHAGUA. Construido con **Next.js 15**, **React 19** y **TypeScript**.
+Portal web institucional para la emision de votos del Consejo Local del Servicio Local de Educacion Publica (SLEP). Construido con **Next.js 15**, **React 19** y **TypeScript**.
 
 Este repositorio esta pensado como un esqueleto compartible de frontend. La arquitectura visual, la experiencia de usuario y el contrato de integracion se reutilizan entre Servicios Locales, mientras que cada Servicio Local implementa, opera y audita su propio backend segun su padron, su infraestructura y sus controles internos.
 

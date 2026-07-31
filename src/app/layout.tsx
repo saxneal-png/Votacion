@@ -4,8 +4,8 @@ import { headers } from 'next/headers';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'Portal de Votacion | SLEP COLCHAGUA',
-  description: 'Frontend modular del Portal de Votacion del Consejo Local para SLEP VALLE DIGUILLIN.',
+  title: 'Portal de Votacion | Consejo Local SLEP',
+  description: 'Frontend modular del Portal de Votacion del Consejo Local SLEP.',
   robots: { index: false, follow: false },
 };
 

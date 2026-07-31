@@ -182,36 +182,55 @@ export async function getVotingRecordsAsync({
   }
 
   try {
-    let query = supabase.from('acta_sufragio').select('*').order('fecha_hora', { ascending: false });
+    const PAGE_SIZE = 1000;
+    let allRows: Record<string, any>[] = [];
+    let page = 0;
+    let hasMore = true;
 
-    if (estamento && estamento !== 'ALL') {
-      query = query.eq('estamento', estamento.toUpperCase());
+    while (hasMore) {
+      let query = supabase.from('acta_sufragio').select('*').order('fecha_hora', { ascending: false });
+
+      if (estamento && estamento !== 'ALL') {
+        query = query.eq('estamento', estamento.toUpperCase());
+      }
+
+      if (rbd && rbd !== 'ALL') {
+        query = query.eq('rbd_establecimiento', rbd);
+      }
+
+      if (search) {
+        const q = search.trim();
+        query = query.or(
+          `folio.ilike.%${q}%,rut_votante.ilike.%${q}%,email_registrado.ilike.%${q}%,nombre_establecimiento.ilike.%${q}%`,
+        );
+      }
+
+      query = query.range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
+
+      const { data, error } = await query;
+
+      if (error) {
+        console.error('[SUPABASE] Error al leer acta_sufragio:', error.message);
+        break;
+      }
+
+      if (!data || data.length === 0) {
+        hasMore = false;
+      } else {
+        allRows = allRows.concat(data);
+        if (data.length < PAGE_SIZE) {
+          hasMore = false;
+        } else {
+          page++;
+        }
+      }
     }
 
-    if (rbd && rbd !== 'ALL') {
-      query = query.eq('rbd_establecimiento', rbd);
-    }
-
-    if (search) {
-      const q = search.trim();
-      query = query.or(
-        `folio.ilike.%${q}%,rut_votante.ilike.%${q}%,email_registrado.ilike.%${q}%,nombre_establecimiento.ilike.%${q}%`,
-      );
-    }
-
-    const { data, error } = await query;
-
-    if (error) {
-      console.error('[SUPABASE] Error al leer acta_sufragio:', error.message);
-      return getVotingRecords({ search, estamento, rbd });
-    }
-
-    if (!data || data.length === 0) {
-      // Sin registros en Supabase — retornar lista vacía (no caer a memoria)
+    if (allRows.length === 0) {
       return { records: [], total: 0 };
     }
 
-    const records: VotingRecordEntry[] = data.map((item) => ({
+    const records: VotingRecordEntry[] = allRows.map((item) => ({
       folio: item.folio,
       rutVotante: item.rut_votante,
       formattedRutVotante: item.formatted_rut_votante || item.rut_votante,
