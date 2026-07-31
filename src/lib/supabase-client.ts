@@ -48,17 +48,48 @@ export function isSupabaseConfigured(): boolean {
 }
 
 /**
- * Registra el voto anónimo en Supabase
+ * Registra el voto de forma atómica en Supabase utilizando la función RPC PostgreSQL `emitir_voto_atomico`.
+ * Si la función RPC no está disponible en la BD, cae a las inserciones separadas.
  */
 export async function recordVoteInSupabase({
   estamento,
   candidateId,
   rut,
+  rbd = '10101',
+  nombreEstablecimiento = 'Establecimiento SLEP',
+  email = '',
 }: {
   estamento: string;
   candidateId: string;
   rut: string;
+  rbd?: string;
+  nombreEstablecimiento?: string;
+  email?: string;
 }): Promise<{ success: boolean; comprobanteId: string }> {
+  try {
+    const { data, error } = await supabaseAdmin.rpc('emitir_voto_atomico', {
+      p_rut: rut.toLowerCase().trim(),
+      p_candidate_id: candidateId,
+      p_estamento: estamento,
+      p_rbd: rbd,
+      p_nombre_establecimiento: nombreEstablecimiento,
+      p_email: email,
+    });
+
+    if (!error && data?.success) {
+      return {
+        success: true,
+        comprobanteId: data.receiptCode || data.folio,
+      };
+    }
+
+    if (error && !error.message.includes('function') && !error.message.includes('schema')) {
+      console.error('[SUPABASE RPC] Error en RPC emitir_voto_atomico:', error.message);
+    }
+  } catch (rpcErr) {
+    console.warn('[SUPABASE RPC] Fallback a inserción cliente:', rpcErr);
+  }
+
   const comprobanteId = `COMP-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
 
   // 1. Insertar el voto en la urna anónima (sin RUT)

@@ -15,6 +15,7 @@
   "dependencies": {
     "@supabase/supabase-js": "^2.111.0",
     "@tailwindcss/postcss": "^4.2.2",
+    "@tanstack/react-virtual": "^3.14.9",
     "next": "^15.3.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
