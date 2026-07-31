@@ -201,8 +201,14 @@ export async function getVotingRecordsAsync({
 
     const { data, error } = await query;
 
-    if (error || !data || data.length === 0) {
+    if (error) {
+      console.error('[SUPABASE] Error al leer acta_sufragio:', error.message);
       return getVotingRecords({ search, estamento, rbd });
+    }
+
+    if (!data || data.length === 0) {
+      // Sin registros en Supabase — retornar lista vacía (no caer a memoria)
+      return { records: [], total: 0 };
     }
 
     const records: VotingRecordEntry[] = data.map((item) => ({
@@ -218,7 +224,8 @@ export async function getVotingRecordsAsync({
     }));
 
     return { records, total: records.length };
-  } catch {
+  } catch (err) {
+    console.error('[SUPABASE] Excepción al consultar acta_sufragio:', err);
     return getVotingRecords({ search, estamento, rbd });
   }
 }
