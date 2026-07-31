@@ -1,7 +1,6 @@
 import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
 
-import { getMockUserByRut, verifyOtpCode } from '@/lib/mock-api';
 import {
   destroySession,
   getSession,
@@ -42,20 +41,18 @@ export async function POST(request: Request) {
       );
     }
 
-    const user = getMockUserByRut(session.userRut);
-    if (!user) {
+    // Comparar contra el OTP guardado en la sesión server-side.
+    // Esto elimina la dependencia de getMockUserByRut y garantiza
+    // que el OTP corresponda exactamente al enviado por correo.
+    const expectedOtp = session.userOtp;
+    if (!expectedOtp) {
       return NextResponse.json(
-        { message: 'No fue posible recuperar la sesion del votante.' },
-        { status: 401 },
+        { message: 'No se encontró el código OTP en la sesión. Por favor solicita un nuevo acceso.' },
+        { status: 400 },
       );
     }
 
-    // Validate first — only count a failure if the OTP is actually wrong.
-    // This prevents destroying the session on the 3rd attempt when the user
-    // enters the correct code.
-    try {
-      await verifyOtpCode(otp, user.otp);
-    } catch {
+    if (otp !== expectedOtp) {
       // Wrong OTP: increment server-side counter and check limit.
       const attempts = incrementOtpAttempts(sessionId);
       if (attempts >= MAX_OTP_ATTEMPTS) {

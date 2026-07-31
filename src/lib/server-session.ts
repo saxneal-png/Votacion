@@ -4,6 +4,18 @@ export const SESSION_COOKIE_NAME = 'voting_session';
 
 interface SessionRecord {
   userRut: string;
+  /** Correo electrónico real con el que el votante se autenticó */
+  userEmail: string;
+  /** Estamento real del votante (padres_apoderados, docentes, asistentes, directivos, estudiantes) */
+  userEstamento: string;
+  /** Nombre completo del votante según el padrón */
+  userFullName: string;
+  /** RBD del establecimiento del votante */
+  userRbd: string;
+  /** Nombre del establecimiento del votante */
+  userOrganization: string;
+  /** OTP generado y enviado por correo para verificar la identidad del votante */
+  userOtp: string;
   otpVerified: boolean;
   otpAttempts: number;
   createdAt: number;
@@ -35,10 +47,29 @@ function isSessionExpired(record: SessionRecord) {
   return Date.now() - record.createdAt > SESSION_TTL_MS;
 }
 
-export function createSession(userRut: string) {
+/**
+ * Crear sesión con todos los datos del votante autenticado.
+ * Almacenar estamento, email y nombre en la sesión evita depender
+ * de getMockUserByRut (que puede fallar en entornos serverless).
+ */
+export function createSession(params: {
+  userRut: string;
+  userEmail: string;
+  userEstamento: string;
+  userFullName: string;
+  userRbd: string;
+  userOrganization: string;
+  userOtp: string;
+}) {
   const sessionId = randomUUID();
   sessionStore.set(sessionId, {
-    userRut,
+    userRut: params.userRut,
+    userEmail: params.userEmail,
+    userEstamento: params.userEstamento.toLowerCase(),
+    userFullName: params.userFullName,
+    userRbd: params.userRbd,
+    userOrganization: params.userOrganization,
+    userOtp: params.userOtp,
     otpVerified: false,
     otpAttempts: 0,
     createdAt: Date.now(),

@@ -221,15 +221,9 @@ export function getMockUserByRut(rut: string): MockUserRecord | null {
     };
   }
 
-  return {
-    rut: normalizedRut || '16940271-K',
-    email: 'docente.prueba@slep.cl',
-    otp: '222222',
-    fullName: 'María González Pérez',
-    organization: 'SLEP VALLE DIGUILLÍN',
-    estamento: 'docentes',
-    schoolId: 'martin-prado',
-  };
+  // No retornar un usuario docente por defecto — puede causar votación en estamento equivocado.
+  // Los flujos post-autenticación usan los datos de la sesión directamente.
+  return null;
 }
 
 export async function verifyUserCredentials(

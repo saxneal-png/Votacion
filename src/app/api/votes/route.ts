@@ -1,7 +1,7 @@
 import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
 
-import { getCandidateById, getMockUserByRut, submitVote } from '@/lib/mock-api';
+import { getCandidateById, submitVote } from '@/lib/mock-api';
 import { recordVote } from '@/lib/metrics-store';
 import { recordOfficialVote } from '@/lib/voting-record-store';
 import {
@@ -11,6 +11,7 @@ import {
   markUserAsVoted,
   SESSION_COOKIE_NAME,
 } from '@/lib/server-session';
+import type { Estamento } from '@/types';
 
 export async function POST(request: Request) {
   const cookieStore = await cookies();
@@ -24,10 +25,19 @@ export async function POST(request: Request) {
     );
   }
 
-  const user = getMockUserByRut(session.userRut);
-  if (!user) {
+  // Usar los datos almacenados en la sesión — no depender de getMockUserByRut.
+  // Esto garantiza que el estamento, email y nombre correspondan al votante
+  // que realmente se autenticó, independientemente del estado en memoria.
+  const userEstamento = session.userEstamento as Estamento;
+  const userEmail = session.userEmail;
+  const userRut = session.userRut;
+  const userOrganization = session.userOrganization;
+  const userRbd = session.userRbd;
+  const userFullName = session.userFullName;
+
+  if (!userEstamento || !userEmail || !userRut) {
     return NextResponse.json(
-      { message: 'No fue posible recuperar al votante autenticado.' },
+      { message: 'Datos de sesión incompletos. Por favor inicia sesión nuevamente.' },
       { status: 401 },
     );
   }
@@ -44,38 +54,50 @@ export async function POST(request: Request) {
     }
 
     const candidate = getCandidateById(candidateId);
-    if (!candidate || candidate.estamento !== user.estamento) {
+    if (!candidate) {
       return NextResponse.json(
-        { message: 'La candidatura seleccionada no pertenece al padron habilitado.' },
+        { message: 'La candidatura seleccionada no fue encontrada.' },
+        { status: 404 },
+      );
+    }
+
+    // Verificar que el candidato sea del mismo estamento del votante autenticado
+    if (candidate.estamento.toLowerCase() !== userEstamento.toLowerCase()) {
+      return NextResponse.json(
+        {
+          message: `La candidatura seleccionada pertenece al estamento "${candidate.estamento}" y usted está acreditado para votar en "${userEstamento}".`,
+        },
         { status: 403 },
       );
     }
 
     // Atomic check + mark: no await between these two calls.
-    // Node.js is single-threaded; without an intervening await, no concurrent
-    // request can pass hasUserVoted after we mark — eliminates the race condition.
-    if (hasUserVoted(user.rut)) {
+    if (hasUserVoted(userRut)) {
       return NextResponse.json(
         { message: 'Ya has emitido tu voto en esta eleccion.' },
         { status: 409 },
       );
     }
-    markUserAsVoted(user.rut);
-    recordVote(candidateId, user.estamento, user.schoolId);
+    markUserAsVoted(userRut);
+    recordVote(candidateId, userEstamento, userRbd);
 
+    // Registrar en el acta oficial con el email y datos reales del votante
     recordOfficialVote({
-      rutVotante: user.rut,
-      emailRegistrado: user.email,
-      estamento: user.estamento,
-      rbdEstablecimiento: user.schoolId,
-      nombreEstablecimiento: user.organization,
+      rutVotante: userRut,
+      emailRegistrado: userEmail,
+      estamento: userEstamento.toUpperCase(),
+      rbdEstablecimiento: userRbd,
+      nombreEstablecimiento: userOrganization,
     });
 
     const result = await submitVote(candidateId);
 
-    // Destroy the session immediately after voting — the cookie is no longer needed.
+    // Destroy the session immediately after voting
     destroySession(sessionId);
-    const response = NextResponse.json(result);
+    const response = NextResponse.json({
+      ...result,
+      voterName: userFullName,
+    });
     response.cookies.set({
       name: SESSION_COOKIE_NAME,
       value: '',

@@ -2,8 +2,8 @@ import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
 
 import { getCandidatosAsync } from '@/lib/candidates-store';
-import { getMockUserByRut } from '@/lib/mock-api';
 import { getSession, SESSION_COOKIE_NAME } from '@/lib/server-session';
+import type { Estamento } from '@/types';
 
 export async function GET() {
   const cookieStore = await cookies();
@@ -17,15 +17,18 @@ export async function GET() {
     );
   }
 
-  const user = getMockUserByRut(session.userRut);
-  if (!user) {
+  // Usar el estamento directamente de la sesión — no depender de getMockUserByRut.
+  // Esto garantiza que el votante vea SOLO los candidatos de SU estamento real.
+  const userEstamento = session.userEstamento as Estamento;
+
+  if (!userEstamento) {
     return NextResponse.json(
-      { message: 'No fue posible recuperar el padron del votante.' },
+      { message: 'No se pudo determinar el estamento del votante. Inicia sesión nuevamente.' },
       { status: 401 },
     );
   }
 
   // Leer candidatos desde Supabase (con fallback a datos en memoria)
-  const candidates = await getCandidatosAsync({ estamento: user.estamento });
+  const candidates = await getCandidatosAsync({ estamento: userEstamento });
   return NextResponse.json(candidates);
 }

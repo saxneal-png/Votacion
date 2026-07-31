@@ -46,7 +46,17 @@ export async function POST(request: Request) {
       estamentoLabel = matchedRecord.estamento;
     }
 
-    const sessionId = createSession(matchedRecord.rutVotante);
+    const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+
+    const sessionId = createSession({
+      userRut: matchedRecord.rutVotante,
+      userEmail: email,
+      userEstamento: matchedRecord.estamento,
+      userFullName: matchedRecord.nombreCompleto,
+      userRbd: matchedRecord.rbdEstablecimiento,
+      userOrganization: matchedRecord.nombreEstablecimiento,
+      userOtp: otpCode,
+    });
 
     // Generar Token Temporal de Acceso (10 min)
     const tempToken = createTempToken({
@@ -58,7 +68,6 @@ export async function POST(request: Request) {
       emailDestino: email,
     });
 
-    const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
 
     // Despachar correo vía M365 / Azure AD Graph API (o Simulación)
     await sendOtpEmailViaGraph({
