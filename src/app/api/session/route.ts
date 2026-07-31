@@ -1,7 +1,6 @@
 import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
 
-import { getMockUserByRut } from '@/lib/mock-api';
 import { destroySession, getSession, SESSION_COOKIE_NAME } from '@/lib/server-session';
 
 export async function GET() {
@@ -10,20 +9,14 @@ export async function GET() {
   const session = getSession(sessionId);
 
   if (session?.otpVerified && session.userRut) {
-    const user = getMockUserByRut(session.userRut) || {
-      rut: session.userRut,
-      fullName: 'Votante Acreditado Decreto 102',
-      email: 'votante@slep.cl',
-      estamento: 'docentes',
-    };
-
     return NextResponse.json({
       authenticated: true,
       user: {
-        rut: user.rut,
-        fullName: user.fullName,
-        email: user.email,
-        estamento: user.estamento,
+        rut: session.userRut,
+        fullName: session.userFullName || 'Votante Acreditado Decreto 102',
+        email: session.userEmail || 'votante@slep.cl',
+        estamento: session.userEstamento || 'apoderados',
+        organization: session.userOrganization || 'SLEP VALLE DIGUILLÍN',
       },
     });
   }

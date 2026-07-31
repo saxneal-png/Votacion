@@ -894,7 +894,7 @@ export default function HomePage() {
                 <VotingView
                   candidates={candidates}
                   voterName={user?.fullName ?? 'Participante'}
-                  estamento={user?.estamento ?? 'docentes'}
+                  estamento={user?.estamento ?? 'apoderados'}
                   isDemoMode={isDemoMode}
                   isPrivacyMode={isPrivacyMode}
                   isSimplifiedMode={isSimplifiedMode}
