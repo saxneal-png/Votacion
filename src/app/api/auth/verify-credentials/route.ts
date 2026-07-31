@@ -96,7 +96,7 @@ export async function POST(request: Request) {
         message:
           error instanceof Error ? error.message : 'No fue posible validar la identidad.',
       },
-      { status: 401 },
+      { status: 400 },
     );
   }
 }
