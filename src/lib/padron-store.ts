@@ -952,7 +952,7 @@ export async function processPadronExcelBufferAsync(buffer: Buffer): Promise<Exc
     try {
       const { error } = await supabaseAdmin
         .from('bd_padron')
-        .upsert(rows, { onConflict: 'rut_votante' });
+        .insert(rows);
 
       if (error) {
         console.error('[SUPABASE] Error en carga masiva Excel a bd_padron:', error.message);
