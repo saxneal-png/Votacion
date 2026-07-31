@@ -2,7 +2,7 @@ import { cookies } from 'next/headers';
 import { type NextRequest, NextResponse } from 'next/server';
 
 import { ADMIN_SESSION_COOKIE, validateAdminSession } from '@/lib/admin-session';
-import { getVotingRecords } from '@/lib/voting-record-store';
+import { getVotingRecordsAsync } from '@/lib/voting-record-store';
 
 export async function GET(request: NextRequest) {
   const cookieStore = await cookies();
@@ -21,7 +21,7 @@ export async function GET(request: NextRequest) {
   const estamento = searchParams.get('estamento') || '';
   const rbd = searchParams.get('rbd') || '';
 
-  const data = getVotingRecords({ search, estamento, rbd });
+  const data = await getVotingRecordsAsync({ search, estamento, rbd });
 
   return NextResponse.json(data, {
     headers: {

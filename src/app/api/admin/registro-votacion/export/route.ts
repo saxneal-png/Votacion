@@ -2,7 +2,7 @@ import { cookies } from 'next/headers';
 import { type NextRequest, NextResponse } from 'next/server';
 
 import { ADMIN_SESSION_COOKIE, validateAdminSession } from '@/lib/admin-session';
-import { generateVotingRecordsCsv } from '@/lib/voting-record-store';
+import { generateVotingRecordsCsvAsync } from '@/lib/voting-record-store';
 
 export async function GET(request: NextRequest) {
   const cookieStore = await cookies();
@@ -21,7 +21,7 @@ export async function GET(request: NextRequest) {
   const estamento = searchParams.get('estamento') || '';
   const rbd = searchParams.get('rbd') || '';
 
-  const csvContent = generateVotingRecordsCsv({ search, estamento, rbd });
+  const csvContent = await generateVotingRecordsCsvAsync({ search, estamento, rbd });
   const filename = `registro_votacion_slep_${new Date().toISOString().slice(0, 10)}.csv`;
 
   return new NextResponse(csvContent, {

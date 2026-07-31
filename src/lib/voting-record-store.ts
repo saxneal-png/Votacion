@@ -166,14 +166,75 @@ export function getVotingRecords({
 }
 
 /**
+ * Obtener registros de votación filtrados desde Supabase (o fallback en memoria)
+ */
+export async function getVotingRecordsAsync({
+  search = '',
+  estamento = '',
+  rbd = '',
+}: {
+  search?: string;
+  estamento?: string;
+  rbd?: string;
+} = {}): Promise<{ records: VotingRecordEntry[]; total: number }> {
+  if (!supabase) {
+    return getVotingRecords({ search, estamento, rbd });
+  }
+
+  try {
+    let query = supabase.from('acta_sufragio').select('*').order('fecha_hora', { ascending: false });
+
+    if (estamento && estamento !== 'ALL') {
+      query = query.eq('estamento', estamento.toUpperCase());
+    }
+
+    if (rbd && rbd !== 'ALL') {
+      query = query.eq('rbd_establecimiento', rbd);
+    }
+
+    if (search) {
+      const q = search.trim();
+      query = query.or(
+        `folio.ilike.%${q}%,rut_votante.ilike.%${q}%,email_registrado.ilike.%${q}%,nombre_establecimiento.ilike.%${q}%`,
+      );
+    }
+
+    const { data, error } = await query;
+
+    if (error || !data || data.length === 0) {
+      return getVotingRecords({ search, estamento, rbd });
+    }
+
+    const records: VotingRecordEntry[] = data.map((item) => ({
+      folio: item.folio,
+      rutVotante: item.rut_votante,
+      formattedRutVotante: item.formatted_rut_votante || item.rut_votante,
+      emailRegistrado: item.email_registrado,
+      fechaHora: item.fecha_hora,
+      fechaHoraFormateada: new Date(item.fecha_hora).toLocaleString('es-CL'),
+      estamento: item.estamento,
+      rbdEstablecimiento: item.rbd_establecimiento,
+      nombreEstablecimiento: item.nombre_establecimiento,
+    }));
+
+    return { records, total: records.length };
+  } catch {
+    return getVotingRecords({ search, estamento, rbd });
+  }
+}
+
+/**
  * Resetear todos los registros de votación (Reinicio Electoral)
  */
 export function resetVotingRecords(): void {
   votingRecords.length = 0;
+  if (supabase) {
+    void supabase.from('acta_sufragio').delete().neq('folio', 'RESET_ALL');
+  }
 }
 
 /**
- * Generar contenido CSV con codificación UTF-8 + BOM para compatibilidad directa con Microsoft Excel
+ * Generar contenido CSV con codificación UTF-8 + BOM para compatibilidad directa con Microsoft Excel (Síncrono)
  */
 export function generateVotingRecordsCsv(filters: { search?: string; estamento?: string; rbd?: string } = {}): string {
   const { records } = getVotingRecords(filters);
@@ -204,6 +265,40 @@ export function generateVotingRecordsCsv(filters: { search?: string; estamento?:
 
   const csvBody = [headers.map(escapeCsv).join(';'), ...rows.map((row) => row.join(';'))].join('\r\n');
 
-  // Anteponer BOM UTF-8 (\uFEFF) para abrir con tildes y caracteres en Excel sin distorsión
+  return `\uFEFF${csvBody}`;
+}
+
+/**
+ * Generar contenido CSV con codificación UTF-8 + BOM desde Supabase (Asíncrono)
+ */
+export async function generateVotingRecordsCsvAsync(filters: { search?: string; estamento?: string; rbd?: string } = {}): Promise<string> {
+  const { records } = await getVotingRecordsAsync(filters);
+
+  const headers = [
+    'Folio Único',
+    'RUN Votante',
+    'RUN Formateado',
+    'Correo Electrónico Registrado',
+    'Estamento',
+    'RBD Colegio',
+    'Establecimiento Educacional',
+    'Fecha y Hora de Sufragio',
+  ];
+
+  const escapeCsv = (val: string) => `"${String(val).replace(/"/g, '""')}"`;
+
+  const rows = records.map((r) => [
+    escapeCsv(r.folio),
+    escapeCsv(r.rutVotante),
+    escapeCsv(r.formattedRutVotante),
+    escapeCsv(r.emailRegistrado),
+    escapeCsv(r.estamento),
+    escapeCsv(r.rbdEstablecimiento),
+    escapeCsv(r.nombreEstablecimiento),
+    escapeCsv(r.fechaHoraFormateada),
+  ]);
+
+  const csvBody = [headers.map(escapeCsv).join(';'), ...rows.map((row) => row.join(';'))].join('\r\n');
+
   return `\uFEFF${csvBody}`;
 }
