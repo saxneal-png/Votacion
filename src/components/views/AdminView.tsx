@@ -98,14 +98,26 @@ export function AdminView({
   
   // Padrón State
   const [padronRecords, setPadronRecords] = useState<PadronRecord[]>([]);
+  const [totalPadronRecords, setTotalPadronRecords] = useState(0);
+  const [totalPadronPages, setTotalPadronPages] = useState(1);
   const [quorums, setQuorums] = useState<QuorumEstamentoStatus[]>([]);
   const [availableSchools, setAvailableSchools] = useState<{ rbd: string; nombre: string }[]>([]);
   const [loadingPadron, setLoadingPadron] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
   const [selectedEstamentoFilter, setSelectedEstamentoFilter] = useState('ALL');
   const [selectedRbdFilter, setSelectedRbdFilter] = useState('ALL');
   const [padronPage, setPadronPage] = useState(1);
   const PADRON_PER_PAGE = 50;
+
+  const padronAbortRef = React.useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedSearchQuery(searchQuery);
+    }, 350);
+    return () => clearTimeout(handler);
+  }, [searchQuery]);
 
   // Modales Padrón
   const [showUploadModal, setShowUploadModal] = useState(false);
@@ -323,31 +335,46 @@ export function AdminView({
     }
   }
 
-  async function fetchPadron() {
+  async function fetchPadron(targetPage = padronPage) {
+    if (padronAbortRef.current) {
+      padronAbortRef.current.abort();
+    }
+    const controller = new AbortController();
+    padronAbortRef.current = controller;
+
     setLoadingPadron(true);
     try {
       const params = new URLSearchParams();
-      if (searchQuery) params.set('search', searchQuery);
+      if (debouncedSearchQuery) params.set('search', debouncedSearchQuery);
       if (selectedEstamentoFilter !== 'ALL') params.set('estamento', selectedEstamentoFilter);
       if (selectedRbdFilter !== 'ALL') params.set('rbd', selectedRbdFilter);
+      params.set('page', String(targetPage));
+      params.set('pageSize', String(PADRON_PER_PAGE));
 
       const res = await fetch(`/api/admin/padron?${params.toString()}`, {
         credentials: 'same-origin',
+        signal: controller.signal,
       });
       if (res.ok) {
         const data = (await res.json()) as {
           records: PadronRecord[];
+          total?: number;
+          totalPages?: number;
           quorums: QuorumEstamentoStatus[];
           schools?: { rbd: string; nombre: string }[];
         };
         setPadronRecords(data.records);
+        setTotalPadronRecords(data.total ?? data.records.length);
+        setTotalPadronPages(data.totalPages ?? 1);
         setQuorums(data.quorums);
         if (data.schools) {
           setAvailableSchools(data.schools);
         }
       }
-    } catch (err) {
-      console.error('Error al cargar padrón:', err);
+    } catch (err: unknown) {
+      if (err instanceof Error && err.name !== 'AbortError') {
+        console.error('Error al cargar padrón:', err);
+      }
     } finally {
       setLoadingPadron(false);
     }
@@ -392,7 +419,7 @@ export function AdminView({
 
   useEffect(() => {
     if (activeTab === 'padron') {
-      void fetchPadron();
+      void fetchPadron(padronPage);
     } else if (activeTab === 'candidaturas') {
       void fetchCandidatos();
     } else if (activeTab === 'registro') {
@@ -400,7 +427,18 @@ export function AdminView({
     } else if (activeTab === 'azure' || activeTab === 'cloud') {
       void fetchAzureConfig();
     }
-  }, [activeTab, searchQuery, selectedEstamentoFilter, selectedRbdFilter, candidatoSearch, candidatoEstamentoFilter, registroSearch, registroEstamentoFilter, registroRbdFilter]);
+  }, [
+    activeTab,
+    padronPage,
+    debouncedSearchQuery,
+    selectedEstamentoFilter,
+    selectedRbdFilter,
+    candidatoSearch,
+    candidatoEstamentoFilter,
+    registroSearch,
+    registroEstamentoFilter,
+    registroRbdFilter,
+  ]);
 
   async function handleSaveAzureConfig() {
     setSavingAzureConfig(true);
@@ -1003,7 +1041,10 @@ az webapp config appsettings set --resource-group rg-slep-elecciones --name vota
                     className="w-full h-10 pl-9 pr-3 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:outline-none focus:border-[#0b5294] transition"
                     placeholder="Buscar por RUN, Estudiante o Nombre..."
                     value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
+                    onChange={(e) => {
+                      setSearchQuery(e.target.value);
+                      setPadronPage(1);
+                    }}
                   />
                   <span className="absolute left-3 top-2.5 text-xs text-slate-400">🔍</span>
                 </div>
@@ -1011,7 +1052,10 @@ az webapp config appsettings set --resource-group rg-slep-elecciones --name vota
                 <select
                   className="h-10 px-3 text-xs rounded-xl border border-slate-200 bg-slate-50 text-slate-700 font-semibold focus:outline-none"
                   value={selectedEstamentoFilter}
-                  onChange={(e) => setSelectedEstamentoFilter(e.target.value)}
+                  onChange={(e) => {
+                    setSelectedEstamentoFilter(e.target.value);
+                    setPadronPage(1);
+                  }}
                 >
                   <option value="ALL">Todos los Estamentos</option>
                   <option value="ESTUDIANTES">Estudiantes</option>
@@ -1024,7 +1068,10 @@ az webapp config appsettings set --resource-group rg-slep-elecciones --name vota
                 <select
                   className="h-10 px-3 text-xs rounded-xl border border-slate-200 bg-slate-50 text-slate-700 font-semibold focus:outline-none max-w-[220px] truncate"
                   value={selectedRbdFilter}
-                  onChange={(e) => setSelectedRbdFilter(e.target.value)}
+                  onChange={(e) => {
+                    setSelectedRbdFilter(e.target.value);
+                    setPadronPage(1);
+                  }}
                 >
                   <option value="ALL">Todos los Establecimientos</option>
                   {availableSchools.length > 0
@@ -1073,9 +1120,9 @@ az webapp config appsettings set --resource-group rg-slep-elecciones --name vota
             <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
               <div className="p-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
                 <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">
-                  Listado Oficial del Padrón ({padronRecords.length} registros cargados)
+                  Listado Oficial del Padrón ({totalPadronRecords} registros en total)
                 </span>
-                {loadingPadron && <span className="text-xs text-[#0b5294] font-semibold animate-pulse">Cargando...</span>}
+                {loadingPadron && <span className="text-xs text-[#0b5294] font-semibold animate-pulse">Cargando datos...</span>}
               </div>
 
               <div className="overflow-x-auto">
@@ -1100,91 +1147,89 @@ az webapp config appsettings set --resource-group rg-slep-elecciones --name vota
                         </td>
                       </tr>
                     ) : (
-                      padronRecords
-                        .slice((padronPage - 1) * PADRON_PER_PAGE, padronPage * PADRON_PER_PAGE)
-                        .map((r) => {
-                          const badge = ESTAMENTO_BADGES[r.estamento] || {
-                            label: r.estamento,
-                            bg: 'bg-slate-100',
-                            text: 'text-slate-700',
-                          };
-                          return (
-                            <tr key={r.id} className="hover:bg-slate-50/80 transition">
-                              <td className="p-3 font-mono font-bold text-slate-900">{r.formattedRutVotante}</td>
-                              <td className="p-3 font-semibold text-slate-900">{r.nombreCompleto}</td>
-                              <td className="p-3">
-                                <span
-                                  className={`inline-block px-2 py-0.5 rounded-md text-[11px] font-bold border ${badge.bg} ${badge.text}`}
-                                >
-                                  {badge.label}
+                      padronRecords.map((r) => {
+                        const badge = ESTAMENTO_BADGES[r.estamento] || {
+                          label: r.estamento,
+                          bg: 'bg-slate-100',
+                          text: 'text-slate-700',
+                        };
+                        return (
+                          <tr key={r.id} className="hover:bg-slate-50/80 transition">
+                            <td className="p-3 font-mono font-bold text-slate-900">{r.formattedRutVotante}</td>
+                            <td className="p-3 font-semibold text-slate-900">{r.nombreCompleto}</td>
+                            <td className="p-3">
+                              <span
+                                className={`inline-block px-2 py-0.5 rounded-md text-[11px] font-bold border ${badge.bg} ${badge.text}`}
+                              >
+                                {badge.label}
+                              </span>
+                            </td>
+                            <td className="p-3 font-mono text-slate-600">
+                              {r.formattedRutEstudiante ? (
+                                <span className="inline-flex items-center gap-1 bg-amber-50 px-2 py-0.5 rounded border border-amber-200 text-amber-900 font-semibold">
+                                  <span>👶</span> {r.formattedRutEstudiante}
                                 </span>
-                              </td>
-                              <td className="p-3 font-mono text-slate-600">
-                                {r.formattedRutEstudiante ? (
-                                  <span className="inline-flex items-center gap-1 bg-amber-50 px-2 py-0.5 rounded border border-amber-200 text-amber-900 font-semibold">
-                                    <span>👶</span> {r.formattedRutEstudiante}
-                                  </span>
-                                ) : (
-                                  <span className="text-slate-400 font-normal">—</span>
-                                )}
-                              </td>
-                              <td className="p-3 text-slate-700">
-                                <div className="font-semibold">{r.nombreEstablecimiento}</div>
-                                <div className="text-[10px] text-slate-600 font-mono">RBD: {r.rbdEstablecimiento}</div>
-                              </td>
-                              <td className="p-3 text-center">
-                                {r.habilitado ? (
-                                  <span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 text-[10px] font-bold">
-                                    Habilitado
-                                  </span>
-                                ) : (
-                                  <span className="px-2 py-0.5 rounded bg-red-100 text-red-800 text-[10px] font-bold">
-                                    Inhabilitado
-                                  </span>
-                                )}
-                              </td>
-                              <td className="p-3 text-center">
-                                {r.haVotado ? (
-                                  <span className="px-2 py-0.5 rounded bg-blue-100 text-blue-800 text-[10px] font-bold">
-                                    Emitido
-                                  </span>
-                                ) : (
-                                  <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-500 text-[10px] font-semibold">
-                                    Pendiente
-                                  </span>
-                                )}
-                              </td>
-                              <td className="p-3 text-right space-x-1">
-                                <button
-                                  type="button"
-                                  onClick={() => handleToggleHabilitado(r.id)}
-                                  className={`px-2 py-1 rounded text-[11px] font-bold transition ${
-                                    r.habilitado
-                                      ? 'bg-amber-100 text-amber-800 hover:bg-amber-200'
-                                      : 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200'
-                                  }`}
-                                >
-                                  {r.habilitado ? 'Inhabilitar' : 'Habilitar'}
-                                </button>
+                              ) : (
+                                <span className="text-slate-400 font-normal">—</span>
+                              )}
+                            </td>
+                            <td className="p-3 text-slate-700">
+                              <div className="font-semibold">{r.nombreEstablecimiento}</div>
+                              <div className="text-[10px] text-slate-600 font-mono">RBD: {r.rbdEstablecimiento}</div>
+                            </td>
+                            <td className="p-3 text-center">
+                              {r.habilitado ? (
+                                <span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 text-[10px] font-bold">
+                                  Habilitado
+                                </span>
+                              ) : (
+                                <span className="px-2 py-0.5 rounded bg-red-100 text-red-800 text-[10px] font-bold">
+                                  Inhabilitado
+                                </span>
+                              )}
+                            </td>
+                            <td className="p-3 text-center">
+                              {r.haVotado ? (
+                                <span className="px-2 py-0.5 rounded bg-blue-100 text-blue-800 text-[10px] font-bold">
+                                  Emitido
+                                </span>
+                              ) : (
+                                <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-500 text-[10px] font-semibold">
+                                  Pendiente
+                                </span>
+                              )}
+                            </td>
+                            <td className="p-3 text-right space-x-1">
+                              <button
+                                type="button"
+                                onClick={() => handleToggleHabilitado(r.id)}
+                                className={`px-2 py-1 rounded text-[11px] font-bold transition ${
+                                  r.habilitado
+                                    ? 'bg-amber-100 text-amber-800 hover:bg-amber-200'
+                                    : 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200'
+                                }`}
+                              >
+                                {r.habilitado ? 'Inhabilitar' : 'Habilitar'}
+                              </button>
 
-                                <button
-                                  type="button"
-                                  onClick={() => handleDeleteVoter(r.id)}
-                                  className="px-2 py-1 rounded bg-red-50 text-red-600 hover:bg-red-100 text-[11px] font-bold transition"
-                                >
-                                  🗑️
-                                </button>
-                              </td>
-                            </tr>
-                          );
-                        })
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteVoter(r.id)}
+                                className="px-2 py-1 rounded bg-red-50 text-red-600 hover:bg-red-100 text-[11px] font-bold transition"
+                              >
+                                🗑️
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })
                     )}
                   </tbody>
                 </table>
               </div>
 
               {/* Paginador Padrón */}
-              {padronRecords.length > PADRON_PER_PAGE && (
+              {totalPadronRecords > PADRON_PER_PAGE && (
                 <div className="p-3 bg-slate-50 border-t border-slate-200 flex items-center justify-between text-xs text-slate-600 font-medium">
                   <div>
                     Mostrando{' '}
@@ -1193,9 +1238,9 @@ az webapp config appsettings set --resource-group rg-slep-elecciones --name vota
                     </span>{' '}
                     a{' '}
                     <span className="font-bold text-slate-900">
-                      {Math.min(padronPage * PADRON_PER_PAGE, padronRecords.length)}
+                      {Math.min(padronPage * PADRON_PER_PAGE, totalPadronRecords)}
                     </span>{' '}
-                    de <span className="font-bold text-slate-900">{padronRecords.length}</span> registros
+                    de <span className="font-bold text-slate-900">{totalPadronRecords}</span> registros
                   </div>
 
                   <div className="flex items-center gap-2">
@@ -1209,18 +1254,12 @@ az webapp config appsettings set --resource-group rg-slep-elecciones --name vota
                     </button>
                     <span>
                       Página <strong className="text-slate-900">{padronPage}</strong> de{' '}
-                      <strong className="text-slate-900">
-                        {Math.ceil(padronRecords.length / PADRON_PER_PAGE)}
-                      </strong>
+                      <strong className="text-slate-900">{totalPadronPages}</strong>
                     </span>
                     <button
                       type="button"
-                      disabled={padronPage >= Math.ceil(padronRecords.length / PADRON_PER_PAGE)}
-                      onClick={() =>
-                        setPadronPage((p) =>
-                          Math.min(Math.ceil(padronRecords.length / PADRON_PER_PAGE), p + 1),
-                        )
-                      }
+                      disabled={padronPage >= totalPadronPages}
+                      onClick={() => setPadronPage((p) => Math.min(totalPadronPages, p + 1))}
                       className="px-3 py-1 rounded-lg border border-slate-300 bg-white hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed font-bold transition"
                     >
                       Siguiente →

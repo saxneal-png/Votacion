@@ -21,8 +21,10 @@ export async function GET(request: NextRequest) {
   const search = searchParams.get('search') ?? '';
   const estamento = searchParams.get('estamento') ?? '';
   const rbd = searchParams.get('rbd') ?? '';
+  const page = parseInt(searchParams.get('page') ?? '1', 10) || 1;
+  const pageSize = parseInt(searchParams.get('pageSize') ?? '50', 10) || 50;
 
-  const data = await getPadronRecordsAsync({ search, estamento, rbd });
+  const data = await getPadronRecordsAsync({ search, estamento, rbd, page, pageSize });
   return NextResponse.json(data, {
     headers: { 'Cache-Control': 'no-store' },
   });

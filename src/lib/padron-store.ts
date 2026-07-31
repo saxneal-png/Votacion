@@ -748,71 +748,84 @@ export async function getPadronRecordsAsync({
   search = '',
   estamento = '',
   rbd = '',
+  page = 1,
+  pageSize = 50,
 }: {
   search?: string;
   estamento?: string;
   rbd?: string;
-} = {}): Promise<{ records: PadronRecord[]; total: number; quorums: QuorumEstamentoStatus[]; schools: SchoolFilterOption[] }> {
+  page?: number;
+  pageSize?: number;
+} = {}): Promise<{
+  records: PadronRecord[];
+  total: number;
+  totalPages: number;
+  currentPage: number;
+  quorums: QuorumEstamentoStatus[];
+  schools: SchoolFilterOption[];
+}> {
   try {
-    const PAGE_SIZE = 1000;
-    let allRows: Record<string, unknown>[] = [];
-    let page = 0;
-    let hasMore = true;
+    let query = supabaseAdmin
+      .from('bd_padron')
+      .select('*', { count: 'exact' })
+      .order('nombre_completo', { ascending: true });
 
-    while (hasMore) {
-      let query = supabaseAdmin
-        .from('bd_padron')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (estamento && estamento !== 'ALL') {
-        query = query.eq('estamento', estamento.toUpperCase());
-      }
-      if (rbd && rbd !== 'ALL') {
-        query = query.eq('rbd_establecimiento', rbd);
-      }
-      if (search) {
-        const q = search.trim();
-        query = query.or(
-          `rut_votante.ilike.%${q}%,nombre_completo.ilike.%${q}%,nombre_establecimiento.ilike.%${q}%`,
-        );
-      }
-
-      query = query.range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
-
-      const { data, error } = await query;
-
-      if (error) {
-        console.error('[SUPABASE] Error leyendo bd_padron:', error.message);
-        break;
-      }
-
-      if (!data || data.length === 0) {
-        hasMore = false;
-      } else {
-        allRows = allRows.concat(data as Record<string, unknown>[]);
-        if (data.length < PAGE_SIZE) {
-          hasMore = false;
-        } else {
-          page++;
-        }
-      }
+    if (estamento && estamento !== 'ALL') {
+      query = query.eq('estamento', estamento.toUpperCase());
+    }
+    if (rbd && rbd !== 'ALL') {
+      query = query.eq('rbd_establecimiento', rbd);
+    }
+    if (search) {
+      const q = search.trim();
+      query = query.or(
+        `rut_votante.ilike.%${q}%,nombre_completo.ilike.%${q}%,nombre_establecimiento.ilike.%${q}%`,
+      );
     }
 
-    if (allRows.length === 0) {
-      return getPadronRecords({ search, estamento, rbd });
+    const from = (page - 1) * pageSize;
+    const to = from + pageSize - 1;
+
+    const { data, count, error } = await query.range(from, to);
+
+    if (error) {
+      console.error('[SUPABASE] Error leyendo bd_padron:', error.message);
+      const localData = getPadronRecords({ search, estamento, rbd });
+      const totalLocal = localData.records.length;
+      const slicedLocal = localData.records.slice(from, from + pageSize);
+      return {
+        records: slicedLocal,
+        total: totalLocal,
+        totalPages: Math.ceil(totalLocal / pageSize) || 1,
+        currentPage: page,
+        quorums: localData.quorums,
+        schools: localData.schools,
+      };
     }
 
-    const records = allRows.map((item) => mapRowToPadronRecord(item));
+    const records = (data || []).map((item) => mapRowToPadronRecord(item as Record<string, unknown>));
+    const total = count ?? records.length;
+    const totalPages = Math.ceil(total / pageSize) || 1;
+
     return {
       records,
-      total: records.length,
+      total,
+      totalPages,
+      currentPage: page,
       quorums: calculateEstamentoQuorums(records),
       schools: getAvailableSchools(records),
     };
   } catch (err) {
     console.error('[SUPABASE] Excepción al consultar bd_padron:', err);
-    return getPadronRecords({ search, estamento, rbd });
+    const localData = getPadronRecords({ search, estamento, rbd });
+    return {
+      records: localData.records.slice(0, pageSize),
+      total: localData.records.length,
+      totalPages: Math.ceil(localData.records.length / pageSize) || 1,
+      currentPage: page,
+      quorums: localData.quorums,
+      schools: localData.schools,
+    };
   }
 }
 

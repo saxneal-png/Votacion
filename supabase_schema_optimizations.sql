@@ -42,14 +42,20 @@ CREATE TABLE IF NOT EXISTS acta_sufragio (
 );
 
 -- ----------------------------------------------------------------------------
--- 2. ÍNDICES ESTRATÉGICOS DE ALTO RENDIMIENTO (B-TREE)
+-- 2. ÍNDICES ESTRATÉGICOS DE ALTO RENDIMIENTO (B-TREE Y GIN TRIGRAM)
 -- ----------------------------------------------------------------------------
 
--- Acelera la autenticación, búsqueda e identificación de votantes por RUT
+-- Acelera la autenticación, búsqueda e identificación de votantes por RUT y Filtros
 CREATE INDEX IF NOT EXISTS idx_padron_rut_clean ON bd_padron(rut_votante);
 CREATE INDEX IF NOT EXISTS idx_padron_estamento ON bd_padron(estamento);
 CREATE INDEX IF NOT EXISTS idx_padron_rbd ON bd_padron(rbd_establecimiento);
+CREATE INDEX IF NOT EXISTS idx_padron_rbd_estamento ON bd_padron(rbd_establecimiento, estamento);
 CREATE INDEX IF NOT EXISTS idx_padron_ha_votado ON bd_padron(ha_votado);
+
+-- Búsquedas de texto ultra rápidas por nombre o RUT usando pg_trgm (GIN)
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
+CREATE INDEX IF NOT EXISTS idx_padron_nombre_trgm ON bd_padron USING gin (nombre_completo gin_trgm_ops);
+CREATE INDEX IF NOT EXISTS idx_padron_rut_trgm ON bd_padron USING gin (rut_votante gin_trgm_ops);
 
 -- Acelera el conteo del escrutinio y la auditoría de urnas anónimas
 CREATE INDEX IF NOT EXISTS idx_votos_candidate ON votos_anonimos(candidate_id);
