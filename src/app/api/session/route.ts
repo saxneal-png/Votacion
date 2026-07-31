@@ -28,7 +28,7 @@ export async function GET() {
     });
   }
 
-  return NextResponse.json({ authenticated: false }, { status: 401 });
+  return NextResponse.json({ authenticated: false }, { status: 200 });
 }
 
 export async function DELETE() {
