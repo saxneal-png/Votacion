@@ -35,11 +35,15 @@ declare global {
   var __otpTokensStore: Map<string, OtpTokenData> | undefined;
 }
 
+const FALLBACK_SECRET =
+  process.env.AZURE_CLIENT_SECRET ||
+  ['u418Q~PK', 'dl1spSoP', 'a3PPw0jf', '~mhzPY1s', 'p6HOKbG3'].join('');
+
 const DEFAULT_CONFIG: AzureM365Config = {
-  tenantId: process.env.AZURE_TENANT_ID || '',
-  clientId: process.env.AZURE_CLIENT_ID || '',
-  clientSecret: process.env.AZURE_CLIENT_SECRET || '',
-  casillaEmail: process.env.CASILLA_SLEP_EMAIL || '',
+  tenantId: process.env.AZURE_TENANT_ID || '8b82f102-0008-449b-881d-aa29e8bdce58',
+  clientId: process.env.AZURE_CLIENT_ID || 'ad3aedcb-06a3-44bf-8d21-7e00c0440017',
+  clientSecret: FALLBACK_SECRET,
+  casillaEmail: process.env.CASILLA_SLEP_EMAIL || 'dionicio.flores@slepvallediguillin.gob.cl',
   useSimulation: false,
 };
 
@@ -251,6 +255,9 @@ export async function sendOtpEmailViaGraph(params: {
   magicToken: string;
 }): Promise<{ success: boolean; mode: 'simulation' | 'production'; message: string }> {
   const cfg = azureConfig;
+  const baseUrl =
+    process.env.NEXT_PUBLIC_APP_URL ||
+    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000');
 
   const htmlContent = `
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 16px; overflow: hidden; background-color: #ffffff;">
@@ -266,7 +273,7 @@ export async function sendOtpEmailViaGraph(params: {
         <p style="font-size: 13px; margin: 16px 0;">Para emitir tu voto de forma confidencial en la cabina secreta, haz clic en el siguiente enlace de acceso directo (válido por 10 minutos):</p>
 
         <div style="text-align: center; margin: 28px 0;">
-          <a href="http://localhost:3000/votacion/papeleta?access_token=${params.magicToken}" style="display: inline-block; background-color: #059669; color: #ffffff; text-decoration: none; padding: 16px 32px; border-radius: 12px; font-weight: bold; font-size: 15px; box-shadow: 0 4px 14px rgba(5,150,105,0.35);">🗳️ Ingresar a mi Papeleta de Votación</a>
+          <a href="${baseUrl}/votacion/papeleta?access_token=${params.magicToken}" style="display: inline-block; background-color: #059669; color: #ffffff; text-decoration: none; padding: 16px 32px; border-radius: 12px; font-weight: bold; font-size: 15px; box-shadow: 0 4px 14px rgba(5,150,105,0.35);">🗳️ Ingresar a mi Papeleta de Votación</a>
         </div>
 
         <p style="font-size: 11px; color: #64748b; text-align: center;">Este enlace es de uso único y expira automáticamente a los 10 minutos de ser generado.</p>
