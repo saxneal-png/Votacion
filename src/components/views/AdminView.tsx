@@ -243,7 +243,6 @@ export function AdminView({
         await fetchPadron();
         await fetchRegistro();
         await fetchCandidatos();
-        await fetchMetrics();
         onRefresh();
       } else {
         setResetError(data.message || 'No fue posible reiniciar la votación.');
@@ -266,8 +265,9 @@ export function AdminView({
       if (res.ok) {
         setShowClearPadronModal(false);
         await fetchPadron();
-        await fetchMetrics();
+        onRefresh();
       } else {
+
         const data = (await res.json().catch(() => ({}))) as { message?: string };
         alert(data.message || 'No fue posible eliminar el padrón.');
       }
