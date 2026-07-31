@@ -256,8 +256,7 @@ export async function sendOtpEmailViaGraph(params: {
 }): Promise<{ success: boolean; mode: 'simulation' | 'production'; message: string }> {
   const cfg = azureConfig;
   const baseUrl =
-    process.env.NEXT_PUBLIC_APP_URL ||
-    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000');
+    process.env.NEXT_PUBLIC_APP_URL || 'https://votacion-amber.vercel.app';
 
   const htmlContent = `
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 16px; overflow: hidden; background-color: #ffffff;">
