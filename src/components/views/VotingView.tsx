@@ -21,6 +21,26 @@ const ESTAMENTO_COLORS: Record<Estamento, string> = {
   estudiantes: '#0284c7',
 };
 
+export function getEstamentoLabel(estamentoStr: string): string {
+  const norm = (estamentoStr || '').toLowerCase().trim();
+  if (norm.includes('apoderado') || norm.includes('padre')) return 'Padres y Apoderados';
+  if (norm.includes('docente')) return 'Docentes';
+  if (norm.includes('asistente')) return 'Asistentes de la Educación';
+  if (norm.includes('directivo')) return 'Directivos';
+  if (norm.includes('estudiante') || norm.includes('alumno')) return 'Estudiantes';
+  return ESTAMENTO_LABELS[estamentoStr as Estamento] || estamentoStr || 'General';
+}
+
+export function getEstamentoColor(estamentoStr: string): string {
+  const norm = (estamentoStr || '').toLowerCase().trim();
+  if (norm.includes('apoderado') || norm.includes('padre')) return '#d97706';
+  if (norm.includes('docente')) return '#8c4f2f';
+  if (norm.includes('asistente')) return '#1a6a6a';
+  if (norm.includes('directivo')) return '#1a4a7a';
+  if (norm.includes('estudiante') || norm.includes('alumno')) return '#0284c7';
+  return ESTAMENTO_COLORS[estamentoStr as Estamento] || '#0b5294';
+}
+
 interface VotingViewProps {
   candidates: Candidate[];
   voterName: string;
@@ -139,12 +159,12 @@ export function VotingView({
             <span
               className={`inline-flex shrink-0 px-2.5 py-1 rounded-full text-[10px] font-bold font-sans uppercase tracking-wide ${isScreenObscured ? 'sensitive-blur' : ''}`}
               style={{
-                background: `color-mix(in srgb, ${ESTAMENTO_COLORS[estamento]} 14%, white)`,
-                color: ESTAMENTO_COLORS[estamento],
-                border: `1px solid color-mix(in srgb, ${ESTAMENTO_COLORS[estamento]} 28%, white)`,
+                background: `color-mix(in srgb, ${getEstamentoColor(estamento)} 14%, white)`,
+                color: getEstamentoColor(estamento),
+                border: `1px solid color-mix(in srgb, ${getEstamentoColor(estamento)} 28%, white)`,
               }}
             >
-              Padron: {ESTAMENTO_LABELS[estamento]}
+              Padron: {getEstamentoLabel(estamento)}
             </span>
             {isDemoMode ? (
               <span className="inline-flex shrink-0 px-2.5 py-1 rounded-full text-[10px] font-bold font-sans uppercase tracking-wide border border-emerald-200 bg-emerald-50 text-emerald-700">

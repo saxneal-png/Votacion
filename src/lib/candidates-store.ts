@@ -245,6 +245,29 @@ export function getCandidatoById(id: string): Candidate | undefined {
 }
 
 /**
+ * Obtener un candidato por ID (asíncrono desde Supabase con fallback en memoria)
+ */
+export async function getCandidatoByIdAsync(id: string): Promise<Candidate | undefined> {
+  if (!id) return undefined;
+
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('candidatos')
+      .select('*')
+      .eq('id', id)
+      .maybeSingle();
+
+    if (!error && data) {
+      return mapRowToCandidate(data as Record<string, unknown>);
+    }
+  } catch (err) {
+    console.error('[SUPABASE] Excepción al buscar candidato por ID:', err);
+  }
+
+  return getCandidatoById(id);
+}
+
+/**
  * Crear un nuevo candidato
  */
 export function addCandidato(data: CandidateFormData): Candidate {

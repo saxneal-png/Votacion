@@ -2,6 +2,7 @@ import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
 
 import { getCandidateById, submitVote } from '@/lib/mock-api';
+import { getEstamentoVariants } from '@/lib/candidates-store';
 import { recordVote } from '@/lib/metrics-store';
 import { recordOfficialVote } from '@/lib/voting-record-store';
 import {
@@ -53,7 +54,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const candidate = getCandidateById(candidateId);
+    const candidate = await getCandidateById(candidateId);
     if (!candidate) {
       return NextResponse.json(
         { message: 'La candidatura seleccionada no fue encontrada.' },
@@ -62,7 +63,11 @@ export async function POST(request: Request) {
     }
 
     // Verificar que el candidato sea del mismo estamento del votante autenticado
-    if (candidate.estamento.toLowerCase() !== userEstamento.toLowerCase()) {
+    const candidateVariants = getEstamentoVariants(candidate.estamento).map((v) => v.toLowerCase());
+    const userVariants = getEstamentoVariants(userEstamento).map((v) => v.toLowerCase());
+    const isMatchingEstamento = candidateVariants.some((v) => userVariants.includes(v));
+
+    if (!isMatchingEstamento) {
       return NextResponse.json(
         {
           message: `La candidatura seleccionada pertenece al estamento "${candidate.estamento}" y usted está acreditado para votar en "${userEstamento}".`,
