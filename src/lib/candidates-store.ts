@@ -1,4 +1,5 @@
 import type { Candidate, Estamento } from '@/types';
+import { supabaseAdmin } from '@/lib/supabase-client';
 
 export interface CandidateFormData {
   nombreCompleto: string;
@@ -297,4 +298,166 @@ export function deleteCandidato(id: string): boolean {
 
   candidatesStore.splice(index, 1);
   return true;
+}
+
+// ===========================================================================
+// FUNCIONES ASÍNCRONAS CON PERSISTENCIA EN SUPABASE (candidatos)
+// ===========================================================================
+
+function mapRowToCandidate(item: Record<string, unknown>): Candidate {
+  return {
+    id: String(item.id ?? ''),
+    name: String(item.nombre_completo ?? ''),
+    nombreCompleto: String(item.nombre_completo ?? ''),
+    role: String(item.cargo_role ?? ''),
+    slogan: String(item.slogan_propuesta ?? ''),
+    initials: String(item.iniciales ?? ''),
+    accentColor: String(item.color_acento ?? '#0b5294'),
+    estamento: String(item.estamento ?? '') as Estamento,
+    biografia: String(item.biografia ?? ''),
+    propuestaPrincipal: String(item.slogan_propuesta ?? ''),
+    escuelaEstablecimiento: String(item.cargo_role ?? ''),
+    fotoPerfil: item.foto_perfil ? String(item.foto_perfil) : undefined,
+  };
+}
+
+/**
+ * Obtener candidatos desde Supabase con fallback en memoria
+ */
+export async function getCandidatosAsync({
+  estamento = '',
+  search = '',
+}: {
+  estamento?: string;
+  search?: string;
+} = {}): Promise<Candidate[]> {
+  try {
+    let query = supabaseAdmin
+      .from('candidatos')
+      .select('*')
+      .order('created_at', { ascending: true });
+
+    if (estamento && estamento !== 'ALL') {
+      query = query.eq('estamento', estamento.toLowerCase());
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+      console.error('[SUPABASE] Error leyendo candidatos:', error.message);
+      return getCandidatos({ estamento, search });
+    }
+
+    if (!data || data.length === 0) {
+      return getCandidatos({ estamento, search });
+    }
+
+    let results = data.map((item) => mapRowToCandidate(item as Record<string, unknown>));
+
+    if (search) {
+      const q = search.toLowerCase().trim();
+      results = results.filter(
+        (c) =>
+          (c.nombreCompleto || c.name).toLowerCase().includes(q) ||
+          (c.escuelaEstablecimiento || c.role).toLowerCase().includes(q) ||
+          (c.slogan || '').toLowerCase().includes(q),
+      );
+    }
+
+    return results;
+  } catch (err) {
+    console.error('[SUPABASE] Excepción al consultar candidatos:', err);
+    return getCandidatos({ estamento, search });
+  }
+}
+
+/**
+ * Crear candidato en Supabase y en memoria
+ */
+export async function addCandidatoAsync(data: CandidateFormData): Promise<Candidate> {
+  const local = addCandidato(data);
+
+  try {
+    const { error } = await supabaseAdmin.from('candidatos').insert({
+      id: local.id,
+      nombre_completo: local.nombreCompleto || local.name,
+      cargo_role: local.escuelaEstablecimiento || local.role,
+      slogan_propuesta: local.propuestaPrincipal || local.slogan,
+      iniciales: local.initials,
+      color_acento: local.accentColor,
+      estamento: local.estamento,
+      biografia: local.biografia || '',
+      foto_perfil: local.fotoPerfil || null,
+      votos_acumulados: 0,
+      created_at: new Date().toISOString(),
+    });
+
+    if (error) {
+      console.error('[SUPABASE] Error insertando candidato:', error.message);
+    } else {
+      console.log('[SUPABASE] Candidato insertado en Supabase:', local.id);
+    }
+  } catch (err) {
+    console.error('[SUPABASE] Excepción al insertar candidato:', err);
+  }
+
+  return local;
+}
+
+/**
+ * Actualizar candidato en Supabase y en memoria
+ */
+export async function updateCandidatoAsync(id: string, data: Partial<CandidateFormData>): Promise<Candidate> {
+  const local = updateCandidato(id, data);
+
+  try {
+    const { error } = await supabaseAdmin
+      .from('candidatos')
+      .update({
+        nombre_completo: local.nombreCompleto || local.name,
+        cargo_role: local.escuelaEstablecimiento || local.role,
+        slogan_propuesta: local.propuestaPrincipal || local.slogan,
+        iniciales: local.initials,
+        estamento: local.estamento,
+        biografia: local.biografia || '',
+        foto_perfil: local.fotoPerfil || null,
+      })
+      .eq('id', id);
+
+    if (error) {
+      console.error('[SUPABASE] Error actualizando candidato:', error.message);
+    } else {
+      console.log('[SUPABASE] Candidato actualizado en Supabase:', id);
+    }
+  } catch (err) {
+    console.error('[SUPABASE] Excepción al actualizar candidato:', err);
+  }
+
+  return local;
+}
+
+/**
+ * Eliminar candidato en Supabase y en memoria
+ */
+export async function deleteCandidatoAsync(id: string): Promise<boolean> {
+  const deleted = deleteCandidato(id);
+
+  if (deleted) {
+    try {
+      const { error } = await supabaseAdmin
+        .from('candidatos')
+        .delete()
+        .eq('id', id);
+
+      if (error) {
+        console.error('[SUPABASE] Error eliminando candidato:', error.message);
+      } else {
+        console.log('[SUPABASE] Candidato eliminado de Supabase:', id);
+      }
+    } catch (err) {
+      console.error('[SUPABASE] Excepción al eliminar candidato:', err);
+    }
+  }
+
+  return deleted;
 }

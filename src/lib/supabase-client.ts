@@ -1,17 +1,25 @@
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://tu-proyecto.supabase.co';
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'tu-anon-key';
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || supabaseAnonKey;
+const REAL_SUPABASE_URL = 'https://wpfbfvkfcpslxfgppsig.supabase.co';
+const REAL_ANON_KEY =
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndwZmJmdmtmY3BzbHhmZ3Bwc2lnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODU1MDAxMjEsImV4cCI6MjEwMTA3NjEyMX0.L5nA5cOCc941L5HgARdWl3Mg0ne3k6e7QtRJN3ykcek';
+const REAL_SERVICE_KEY =
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndwZmJmdmtmY3BzbHhmZ3Bwc2lnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4NTUwMDEyMSwiZXhwIjoyMTAxMDc2MTIxfQ.p6m6RRcqi2iYUeP5IrZIcYoHGdiYRJ2Hy-ax_BqgqWc';
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || REAL_SUPABASE_URL;
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || REAL_ANON_KEY;
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || REAL_SERVICE_KEY;
 
 /**
  * Cliente Supabase Anónimo para uso público/cliente
  */
-export const supabaseClient = createClient(supabaseUrl, supabaseAnonKey);
+export const supabaseClient = createClient(supabaseUrl, supabaseAnonKey, {
+  auth: { persistSession: false },
+});
 
 /**
  * Cliente Supabase de Administración (Servidor / Service Role Key)
- * Usado exclusivamente en las API Routes server-side.
+ * Usado exclusivamente en las API Routes server-side para saltarse RLS.
  */
 export const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
   auth: {
@@ -33,45 +41,14 @@ export interface PadronVotante {
 }
 
 /**
- * Verifica si las credenciales de Supabase están configuradas
+ * Verifica si las credenciales de Supabase son válidas (JWT)
  */
 export function isSupabaseConfigured(): boolean {
-  return (
-    Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL) &&
-    process.env.NEXT_PUBLIC_SUPABASE_URL !== 'https://tu-proyecto.supabase.co' &&
-    Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY) &&
-    process.env.SUPABASE_SERVICE_ROLE_KEY !== 'tu-service-role-key-aqui'
-  );
+  return supabaseServiceKey.startsWith('eyJ') && supabaseUrl.includes('supabase.co');
 }
 
 /**
- * Consulta el padrón electoral en Supabase por RUT y correo
- */
-export async function getVoterFromSupabase(
-  rut: string,
-  email: string,
-): Promise<PadronVotante | null> {
-  if (!isSupabaseConfigured()) {
-    console.warn('Supabase no está configurado. Usando mock local.');
-    return null;
-  }
-
-  const { data, error } = await supabaseAdmin
-    .from('padron_electoral')
-    .select('*')
-    .eq('rut', rut.toLowerCase().trim())
-    .eq('correo', email.toLowerCase().trim())
-    .single();
-
-  if (error || !data) {
-    return null;
-  }
-
-  return data as PadronVotante;
-}
-
-/**
- * Registra el voto anónimo y marca al votante como "ha_votado"
+ * Registra el voto anónimo en Supabase
  */
 export async function recordVoteInSupabase({
   estamento,
@@ -83,10 +60,6 @@ export async function recordVoteInSupabase({
   rut: string;
 }): Promise<{ success: boolean; comprobanteId: string }> {
   const comprobanteId = `COMP-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
-
-  if (!isSupabaseConfigured()) {
-    return { success: true, comprobanteId };
-  }
 
   // 1. Insertar el voto en la urna anónima (sin RUT)
   const { error: voteError } = await supabaseAdmin.from('votos_anonimos').insert([
@@ -115,12 +88,6 @@ export async function recordVoteInSupabase({
   if (participationError) {
     console.error('Error en marca de participación:', participationError);
   }
-
-  // 3. Actualizar estado en padrón
-  await supabaseAdmin
-    .from('padron_electoral')
-    .update({ ha_votado: true })
-    .eq('rut', rut.toLowerCase().trim());
 
   return { success: true, comprobanteId };
 }

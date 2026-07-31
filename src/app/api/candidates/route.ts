@@ -1,7 +1,8 @@
 import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
 
-import { getCandidates, getMockUserByRut } from '@/lib/mock-api';
+import { getCandidatosAsync } from '@/lib/candidates-store';
+import { getMockUserByRut } from '@/lib/mock-api';
 import { getSession, SESSION_COOKIE_NAME } from '@/lib/server-session';
 
 export async function GET() {
@@ -24,6 +25,7 @@ export async function GET() {
     );
   }
 
-  const candidates = await getCandidates(user.estamento);
+  // Leer candidatos desde Supabase (con fallback a datos en memoria)
+  const candidates = await getCandidatosAsync({ estamento: user.estamento });
   return NextResponse.json(candidates);
 }

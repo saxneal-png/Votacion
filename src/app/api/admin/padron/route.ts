@@ -3,11 +3,11 @@ import { type NextRequest, NextResponse } from 'next/server';
 
 import { ADMIN_SESSION_COOKIE, validateAdminSession } from '@/lib/admin-session';
 import {
-  addSingleVoter,
-  deleteVoterRecord,
+  addSingleVoterAsync,
+  deleteVoterRecordAsync,
   EstamentoDecreto102,
-  getPadronRecords,
-  toggleVoterHabilitado,
+  getPadronRecordsAsync,
+  toggleVoterHabilitadoAsync,
 } from '@/lib/padron-store';
 
 export async function GET(request: NextRequest) {
@@ -22,8 +22,10 @@ export async function GET(request: NextRequest) {
   const estamento = searchParams.get('estamento') ?? '';
   const rbd = searchParams.get('rbd') ?? '';
 
-  const data = getPadronRecords({ search, estamento, rbd });
-  return NextResponse.json(data);
+  const data = await getPadronRecordsAsync({ search, estamento, rbd });
+  return NextResponse.json(data, {
+    headers: { 'Cache-Control': 'no-store' },
+  });
 }
 
 export async function POST(request: NextRequest) {
@@ -56,7 +58,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const newRecord = addSingleVoter({
+    const newRecord = await addSingleVoterAsync({
       rutVotante: body.rutVotante,
       rutEstudianteAsociado: body.rutEstudianteAsociado,
       nombreCompleto: body.nombreCompleto,
@@ -90,7 +92,7 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
-    const updated = toggleVoterHabilitado(body.id);
+    const updated = await toggleVoterHabilitadoAsync(body.id);
     return NextResponse.json({ success: true, record: updated });
   } catch (error) {
     return NextResponse.json(
@@ -118,7 +120,7 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    const deleted = deleteVoterRecord(id);
+    const deleted = await deleteVoterRecordAsync(id);
     if (!deleted) {
       return NextResponse.json(
         { message: 'No se encontró el registro para eliminar.' },

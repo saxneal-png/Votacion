@@ -3,11 +3,11 @@ import { type NextRequest, NextResponse } from 'next/server';
 
 import { ADMIN_SESSION_COOKIE, validateAdminSession } from '@/lib/admin-session';
 import {
-  addCandidato,
+  addCandidatoAsync,
   CandidateFormData,
-  deleteCandidato,
-  getCandidatos,
-  updateCandidato,
+  deleteCandidatoAsync,
+  getCandidatosAsync,
+  updateCandidatoAsync,
 } from '@/lib/candidates-store';
 
 export async function GET(request: NextRequest) {
@@ -21,8 +21,10 @@ export async function GET(request: NextRequest) {
   const search = searchParams.get('search') ?? '';
   const estamento = searchParams.get('estamento') ?? '';
 
-  const candidatesList = getCandidatos({ search, estamento });
-  return NextResponse.json({ candidates: candidatesList, total: candidatesList.length });
+  const candidatesList = await getCandidatosAsync({ search, estamento });
+  return NextResponse.json({ candidates: candidatesList, total: candidatesList.length }, {
+    headers: { 'Cache-Control': 'no-store' },
+  });
 }
 
 export async function POST(request: NextRequest) {
@@ -42,7 +44,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const newCandidate = addCandidato({
+    const newCandidate = await addCandidatoAsync({
       nombreCompleto: body.nombreCompleto,
       estamento: body.estamento,
       biografia: body.biografia || '',
@@ -73,7 +75,7 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ message: 'Se requiere el id del candidato a actualizar.' }, { status: 400 });
     }
 
-    const updatedCandidate = updateCandidato(body.id, {
+    const updatedCandidate = await updateCandidatoAsync(body.id, {
       nombreCompleto: body.nombreCompleto,
       estamento: body.estamento,
       biografia: body.biografia,
@@ -111,7 +113,7 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ message: 'Se requiere el id del candidato a eliminar.' }, { status: 400 });
     }
 
-    const deleted = deleteCandidato(id);
+    const deleted = await deleteCandidatoAsync(id);
     if (!deleted) {
       return NextResponse.json({ message: 'No se encontró el candidato especificado.' }, { status: 404 });
     }

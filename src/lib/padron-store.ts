@@ -1,5 +1,6 @@
 import * as XLSX from 'xlsx';
 import { cleanAndValidateRUT, formatRut } from '@/lib/rut-validator';
+import { supabaseAdmin } from '@/lib/supabase-client';
 
 export type EstamentoDecreto102 =
   | 'ESTUDIANTES'
@@ -750,4 +751,218 @@ export function resetPadronVotes() {
     record.haVotado = false;
     record.fechaVoto = null;
   });
+}
+
+// ===========================================================================
+// FUNCIONES ASÍNCRONAS CON PERSISTENCIA EN SUPABASE (bd_padron)
+// ===========================================================================
+
+function mapRowToPadronRecord(item: Record<string, unknown>): PadronRecord {
+  return {
+    id: String(item.id ?? ''),
+    rutVotante: String(item.rut_votante ?? ''),
+    formattedRutVotante: String(item.formatted_rut_votante ?? item.rut_votante ?? ''),
+    rutEstudianteAsociado: item.rut_estudiante_asociado ? String(item.rut_estudiante_asociado) : null,
+    formattedRutEstudiante: item.formatted_rut_estudiante ? String(item.formatted_rut_estudiante) : null,
+    nombreCompleto: String(item.nombre_completo ?? ''),
+    estamento: String(item.estamento ?? '') as EstamentoDecreto102,
+    rbdEstablecimiento: String(item.rbd_establecimiento ?? ''),
+    nombreEstablecimiento: String(item.nombre_establecimiento ?? ''),
+    habilitado: Boolean(item.habilitado ?? true),
+    haVotado: Boolean(item.ha_votado ?? false),
+    fechaVoto: item.fecha_voto ? String(item.fecha_voto) : null,
+    createdAt: String(item.created_at ?? new Date().toISOString()),
+  };
+}
+
+/**
+ * Obtener el padrón filtrado desde Supabase (o fallback en memoria)
+ */
+export async function getPadronRecordsAsync({
+  search = '',
+  estamento = '',
+  rbd = '',
+}: {
+  search?: string;
+  estamento?: string;
+  rbd?: string;
+} = {}): Promise<{ records: PadronRecord[]; total: number; quorums: QuorumEstamentoStatus[]; schools: SchoolFilterOption[] }> {
+  try {
+    let query = supabaseAdmin
+      .from('bd_padron')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (estamento && estamento !== 'ALL') {
+      query = query.eq('estamento', estamento.toUpperCase());
+    }
+    if (rbd && rbd !== 'ALL') {
+      query = query.eq('rbd_establecimiento', rbd);
+    }
+    if (search) {
+      const q = search.trim();
+      query = query.or(
+        `rut_votante.ilike.%${q}%,nombre_completo.ilike.%${q}%,nombre_establecimiento.ilike.%${q}%`,
+      );
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+      console.error('[SUPABASE] Error leyendo bd_padron:', error.message);
+      return getPadronRecords({ search, estamento, rbd });
+    }
+
+    // Si Supabase no tiene datos, retornar los de demo en memoria
+    if (!data || data.length === 0) {
+      return getPadronRecords({ search, estamento, rbd });
+    }
+
+    const records = data.map((item) => mapRowToPadronRecord(item as Record<string, unknown>));
+    return {
+      records,
+      total: records.length,
+      quorums: calculateEstamentoQuorums(records),
+      schools: getAvailableSchools(records),
+    };
+  } catch (err) {
+    console.error('[SUPABASE] Excepción al consultar bd_padron:', err);
+    return getPadronRecords({ search, estamento, rbd });
+  }
+}
+
+/**
+ * Agregar un votante al padrón en Supabase y en memoria
+ */
+export async function addSingleVoterAsync(data: {
+  rutVotante: string;
+  rutEstudianteAsociado?: string;
+  nombreCompleto: string;
+  estamento: EstamentoDecreto102;
+  rbdEstablecimiento: string;
+  nombreEstablecimiento: string;
+}): Promise<PadronRecord> {
+  // Primero validar con la función síncrona (que maneja validación RUT, duplicados, etc.)
+  const localRecord = addSingleVoter(data);
+
+  // Luego persistir en Supabase
+  try {
+    const { error } = await supabaseAdmin.from('bd_padron').insert({
+      rut_votante: localRecord.rutVotante,
+      formatted_rut_votante: localRecord.formattedRutVotante,
+      rut_estudiante_asociado: localRecord.rutEstudianteAsociado,
+      formatted_rut_estudiante: localRecord.formattedRutEstudiante,
+      nombre_completo: localRecord.nombreCompleto,
+      estamento: localRecord.estamento,
+      rbd_establecimiento: localRecord.rbdEstablecimiento,
+      nombre_establecimiento: localRecord.nombreEstablecimiento,
+      habilitado: true,
+      ha_votado: false,
+      fecha_voto: null,
+      created_at: localRecord.createdAt,
+    });
+
+    if (error) {
+      console.error('[SUPABASE] Error insertando en bd_padron:', error.message);
+    } else {
+      console.log('[SUPABASE] Votante insertado en bd_padron:', localRecord.rutVotante);
+    }
+  } catch (err) {
+    console.error('[SUPABASE] Excepción al insertar votante:', err);
+  }
+
+  return localRecord;
+}
+
+/**
+ * Habilitar/inhabilitar votante en Supabase y en memoria
+ */
+export async function toggleVoterHabilitadoAsync(id: string): Promise<PadronRecord> {
+  const local = toggleVoterHabilitado(id);
+
+  try {
+    const { error } = await supabaseAdmin
+      .from('bd_padron')
+      .update({ habilitado: local.habilitado })
+      .eq('rut_votante', local.rutVotante);
+
+    if (error) {
+      console.error('[SUPABASE] Error actualizando habilitado en bd_padron:', error.message);
+    }
+  } catch (err) {
+    console.error('[SUPABASE] Excepción al actualizar habilitado:', err);
+  }
+
+  return local;
+}
+
+/**
+ * Eliminar votante en Supabase y en memoria
+ */
+export async function deleteVoterRecordAsync(id: string): Promise<boolean> {
+  // Buscar el rut_votante antes de eliminar de memoria
+  const record = padronStore.find((r) => r.id === id);
+  const deleted = deleteVoterRecord(id);
+
+  if (deleted && record) {
+    try {
+      const { error } = await supabaseAdmin
+        .from('bd_padron')
+        .delete()
+        .eq('rut_votante', record.rutVotante);
+
+      if (error) {
+        console.error('[SUPABASE] Error eliminando de bd_padron:', error.message);
+      } else {
+        console.log('[SUPABASE] Votante eliminado de bd_padron:', record.rutVotante);
+      }
+    } catch (err) {
+      console.error('[SUPABASE] Excepción al eliminar votante:', err);
+    }
+  }
+
+  return deleted;
+}
+
+/**
+ * Carga masiva de Excel con persistencia en Supabase
+ */
+export async function processPadronExcelBufferAsync(buffer: Buffer): Promise<ExcelProcessingResult> {
+  // Procesar el Excel usando la función síncrona (que agrega a padronStore en memoria)
+  const result = processPadronExcelBuffer(buffer);
+
+  // Sincronizar los registros nuevos a Supabase
+  if (result.registrosInsertados > 0) {
+    const newRecords = padronStore.slice(0, result.registrosInsertados);
+    const rows = newRecords.map((r) => ({
+      rut_votante: r.rutVotante,
+      formatted_rut_votante: r.formattedRutVotante,
+      rut_estudiante_asociado: r.rutEstudianteAsociado,
+      formatted_rut_estudiante: r.formattedRutEstudiante,
+      nombre_completo: r.nombreCompleto,
+      estamento: r.estamento,
+      rbd_establecimiento: r.rbdEstablecimiento,
+      nombre_establecimiento: r.nombreEstablecimiento,
+      habilitado: r.habilitado,
+      ha_votado: r.haVotado,
+      fecha_voto: r.fechaVoto,
+      created_at: r.createdAt,
+    }));
+
+    try {
+      const { error } = await supabaseAdmin
+        .from('bd_padron')
+        .upsert(rows, { onConflict: 'rut_votante' });
+
+      if (error) {
+        console.error('[SUPABASE] Error en carga masiva Excel a bd_padron:', error.message);
+      } else {
+        console.log(`[SUPABASE] ${result.registrosInsertados} registros cargados en bd_padron.`);
+      }
+    } catch (err) {
+      console.error('[SUPABASE] Excepción en carga masiva:', err);
+    }
+  }
+
+  return result;
 }

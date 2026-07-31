@@ -2,7 +2,7 @@ import { cookies } from 'next/headers';
 import { type NextRequest, NextResponse } from 'next/server';
 
 import { ADMIN_SESSION_COOKIE, validateAdminSession } from '@/lib/admin-session';
-import { processPadronExcelBuffer } from '@/lib/padron-store';
+import { processPadronExcelBufferAsync } from '@/lib/padron-store';
 
 export async function POST(request: NextRequest) {
   const cookieStore = await cookies();
@@ -34,7 +34,8 @@ export async function POST(request: NextRequest) {
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
-    const result = processPadronExcelBuffer(buffer);
+    // Usar la versión async que persiste en Supabase (bd_padron)
+    const result = await processPadronExcelBufferAsync(buffer);
 
     return NextResponse.json(result);
   } catch (error) {

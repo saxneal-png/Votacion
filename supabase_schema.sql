@@ -57,6 +57,8 @@ CREATE TABLE IF NOT EXISTS candidatos (
     iniciales VARCHAR(10) NOT NULL,
     color_acento VARCHAR(20) DEFAULT '#0b5294',
     estamento VARCHAR(50) NOT NULL,
+    biografia TEXT DEFAULT '',
+    foto_perfil TEXT,
     votos_acumulados INT DEFAULT 0,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );

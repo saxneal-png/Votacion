@@ -273,7 +273,7 @@ export async function verifyOtpCode(otp: string, expectedOtp: string): Promise<v
   throw new Error('El codigo OTP no es valido o ha expirado.');
 }
 
-import { getCandidatoById as getFromStoreById, getCandidatos as getFromStore } from '@/lib/candidates-store';
+import { getCandidatoById as getFromStoreById, getCandidatosAsync } from '@/lib/candidates-store';
 
 export function getCandidateById(candidateId: string): Candidate | null {
   return getFromStoreById(candidateId) ?? null;
@@ -281,7 +281,7 @@ export function getCandidateById(candidateId: string): Candidate | null {
 
 export async function getCandidates(estamento: Estamento): Promise<Candidate[]> {
   await wait(300);
-  return getFromStore({ estamento });
+  return getCandidatosAsync({ estamento });
 }
 
 export async function submitVote(
