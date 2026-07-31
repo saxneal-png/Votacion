@@ -44,7 +44,23 @@ CREATE TABLE IF NOT EXISTS acta_sufragio (
 CREATE INDEX IF NOT EXISTS idx_acta_folio ON acta_sufragio(folio);
 CREATE INDEX IF NOT EXISTS idx_acta_rut ON acta_sufragio(rut_votante);
 
--- 4. TABLA: CANDIDATURAS (candidatos)
+-- 4. TABLA: URNA ANÓNIMA DE VOTOS (votos_anonimos)
+CREATE TABLE IF NOT EXISTS votos_anonimos (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    estamento VARCHAR(50) NOT NULL,
+    candidate_id VARCHAR(100) NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- 5. TABLA: REGISTRO DE PARTICIPACIÓN (registro_participacion)
+CREATE TABLE IF NOT EXISTS registro_participacion (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    rut VARCHAR(15) NOT NULL,
+    comprobante_id VARCHAR(100) NOT NULL,
+    voted_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- 6. TABLA: CANDIDATURAS (candidatos)
 CREATE TABLE IF NOT EXISTS candidatos (
     id VARCHAR(100) PRIMARY KEY,
     nombre_completo VARCHAR(255) NOT NULL,
@@ -57,7 +73,7 @@ CREATE TABLE IF NOT EXISTS candidatos (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- 5. TABLA: BITÁCORA DE AUDITORÍA (bitacora_auditoria)
+-- 7. TABLA: BITÁCORA DE AUDITORÍA (bitacora_auditoria)
 CREATE TABLE IF NOT EXISTS bitacora_auditoria (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     timestamp BIGINT NOT NULL,
@@ -67,7 +83,7 @@ CREATE TABLE IF NOT EXISTS bitacora_auditoria (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- 6. DATOS INICIALES DE CANDIDATOS POR DEFECTO
+-- 8. DATOS INICIALES DE CANDIDATOS POR DEFECTO
 INSERT INTO candidatos (id, nombre_completo, cargo_role, slogan_propuesta, iniciales, color_acento, estamento)
 VALUES
 ('pablo-reyes', 'Pablo Reyes', 'Director establecimiento zona norte', 'Liderazgo pedagógico centrado en resultados colectivos.', 'PR', '#1a4a7a', 'directivos'),
