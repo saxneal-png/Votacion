@@ -1,7 +1,9 @@
 import { cookies } from 'next/headers';
 import { type NextRequest, NextResponse } from 'next/server';
 
-import { candidates } from '@/lib/mock-api';
+import { getCandidatosAsync, getEstamentoVariants } from '@/lib/candidates-store';
+import { getPadronRecordsAsync } from '@/lib/padron-store';
+import { getVotingRecordsAsync } from '@/lib/voting-record-store';
 import { getSchoolsVoted, getVoteTallies } from '@/lib/metrics-store';
 import { SCHOOLS } from '@/lib/schools-data';
 import {
@@ -9,7 +11,7 @@ import {
   addAuditEntry,
   validateAdminSession,
 } from '@/lib/admin-session';
-import type { AdminMetrics, CandidateResult, EstamentoResult, SchoolResult } from '@/types';
+import type { AdminMetrics, CandidateResult, EstamentoResult, Estamento, SchoolResult } from '@/types';
 
 function getClientIp(request: NextRequest): string {
   return (
@@ -34,56 +36,86 @@ export async function GET(request: NextRequest) {
 
   addAuditEntry({ ts: Date.now(), ip, event: 'access' });
 
+  // 1. Obtener candidatos actualizados (Supabase / Store)
+  const allCandidates = await getCandidatosAsync({ estamento: 'ALL' });
+
+  // 2. Obtener padrón oficial de votantes (Supabase / Store)
+  const { records: padronRecords } = await getPadronRecordsAsync();
+
+  // 3. Obtener actas oficiales de voto (Supabase / Store)
+  const { records: votingRecords } = await getVotingRecordsAsync();
+
   const tallies = getVoteTallies();
   const schoolsVotedMap = getSchoolsVoted();
 
-  // ── Padrón totals (derived from schools data) ───────────────────────────
-  const padron = SCHOOLS.reduce(
-    (acc, s) => ({
-      total:
-        acc.total +
-        s.voters.directivos +
-        s.voters.docentes +
-        s.voters.asistentes +
-        s.voters.apoderados,
-      directivos: acc.directivos + s.voters.directivos,
-      docentes: acc.docentes + s.voters.docentes,
-      asistentes: acc.asistentes + s.voters.asistentes,
-      apoderados: acc.apoderados + s.voters.apoderados,
-    }),
-    { total: 0, directivos: 0, docentes: 0, asistentes: 0, apoderados: 0 },
-  );
+  // ── Padrón totals por estamento ──────────────────────────────────────────
+  const padron = {
+    total: 0,
+    directivos: 0,
+    docentes: 0,
+    asistentes: 0,
+    apoderados: 0,
+    estudiantes: 0,
+  };
 
-  // ── Per-estamento vote tallies ───────────────────────────────────────────
-  function countVotesByEstamento(estamento: string) {
-    return candidates
-      .filter((c) => c.estamento === estamento)
-      .reduce((sum, c) => sum + (tallies.get(c.id) ?? 0), 0);
+  if (padronRecords.length > 0) {
+    padron.total = padronRecords.length;
+    padronRecords.forEach((p) => {
+      const vars = getEstamentoVariants(p.estamento).map((v) => v.toLowerCase());
+      if (vars.includes('directivos')) padron.directivos++;
+      else if (vars.includes('docentes')) padron.docentes++;
+      else if (vars.includes('asistentes')) padron.asistentes++;
+      else if (vars.includes('apoderados')) padron.apoderados++;
+      else if (vars.includes('estudiantes')) padron.estudiantes++;
+    });
+  } else {
+    // Fallback a SCHOOLS
+    SCHOOLS.forEach((s) => {
+      padron.directivos += s.voters.directivos;
+      padron.docentes += s.voters.docentes;
+      padron.asistentes += s.voters.asistentes;
+      padron.apoderados += s.voters.apoderados;
+    });
+    padron.total = padron.directivos + padron.docentes + padron.asistentes + padron.apoderados;
   }
 
+  // ── Votos totales emitidos por estamento (desde acta oficial) ────────────
   const votes = {
-    directivos: countVotesByEstamento('directivos'),
-    docentes: countVotesByEstamento('docentes'),
-    asistentes: countVotesByEstamento('asistentes'),
-    apoderados: countVotesByEstamento('apoderados'),
-    total: 0,
+    total: votingRecords.length,
+    directivos: 0,
+    docentes: 0,
+    asistentes: 0,
+    apoderados: 0,
+    estudiantes: 0,
   };
-  votes.total = votes.directivos + votes.docentes + votes.asistentes + votes.apoderados;
 
-  // ── Estamento breakdowns ─────────────────────────────────────────────────
+  votingRecords.forEach((v) => {
+    const vars = getEstamentoVariants(v.estamento).map((val) => val.toLowerCase());
+    if (vars.includes('directivos')) votes.directivos++;
+    else if (vars.includes('docentes')) votes.docentes++;
+    else if (vars.includes('asistentes')) votes.asistentes++;
+    else if (vars.includes('apoderados')) votes.apoderados++;
+    else if (vars.includes('estudiantes')) votes.estudiantes++;
+  });
+
+  // ── Desglose por estamento y sus candidaturas vinculadas ───────────────────
   const ESTAMENTO_META = [
-    { estamento: 'directivos', label: 'Directivos', color: '#1a4a7a' },
-    { estamento: 'docentes', label: 'Docentes', color: '#8c4f2f' },
-    { estamento: 'asistentes', label: 'Asistentes de la Educación', color: '#1a6a6a' },
-    { estamento: 'apoderados', label: 'Apoderados', color: '#d97706' },
-  ] as const;
+    { estamento: 'directivos' as Estamento, label: 'Directivos', color: '#1a4a7a' },
+    { estamento: 'docentes' as Estamento, label: 'Docentes', color: '#8c4f2f' },
+    { estamento: 'asistentes' as Estamento, label: 'Asistentes de la Educación', color: '#1a6a6a' },
+    { estamento: 'apoderados' as Estamento, label: 'Apoderados', color: '#d97706' },
+    { estamento: 'estudiantes' as Estamento, label: 'Estudiantes', color: '#0284c7' },
+  ];
 
   const estamentos: EstamentoResult[] = ESTAMENTO_META.map(({ estamento, label, color }) => {
-    const estamentoCandidates = candidates.filter((c) => c.estamento === estamento);
+    const estamentoVariants = getEstamentoVariants(estamento).map((v) => v.toLowerCase());
+    const estamentoCandidates = allCandidates.filter((c) =>
+      estamentoVariants.includes(c.estamento.toLowerCase()),
+    );
 
     const candidateResults: CandidateResult[] = estamentoCandidates.map((c) => ({
       id: c.id,
-      name: c.name,
+      name: c.nombreCompleto || c.name,
       initials: c.initials,
       accentColor: c.accentColor,
       votes: tallies.get(c.id) ?? 0,
@@ -93,8 +125,8 @@ export async function GET(request: NextRequest) {
       estamento,
       label,
       color,
-      padronCount: padron[estamento],
-      votesCast: votes[estamento],
+      padronCount: padron[estamento] ?? 0,
+      votesCast: votes[estamento] ?? 0,
       candidates: candidateResults,
     };
   });
