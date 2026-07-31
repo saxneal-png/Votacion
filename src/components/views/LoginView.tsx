@@ -311,33 +311,44 @@ export function LoginView({
         ) : null}
 
         {errorMessage === 'SUCCESS_MAGIC_LINK_SENT' ? (
-          <div role="status" aria-live="polite" className="m-0 p-4 rounded-xl text-[13px] font-sans font-medium text-emerald-900 bg-emerald-50 border border-emerald-300 shadow-sm grid gap-2">
-            <div className="flex items-center gap-2 font-bold text-sm text-emerald-800">
-              <svg width="18" height="18" viewBox="0 0 20 20" fill="currentColor" className="shrink-0 text-emerald-600">
-                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-              </svg>
-              <span>¡Enlace Mágico despachado exitosamente!</span>
+          <div role="status" aria-live="polite" className="m-0 p-5 rounded-2xl text-[14px] font-sans text-emerald-950 bg-gradient-to-br from-emerald-50 via-teal-50/50 to-emerald-50 border border-emerald-300 shadow-md grid gap-3.5 animate-fade-in">
+            <div className="flex items-center gap-2.5 font-bold text-base text-emerald-900">
+              <span className="text-xl">✨</span>
+              <span>¡Acreditación enviada con éxito!</span>
             </div>
-            <p className="m-0 leading-relaxed text-emerald-950">
-              Hemos enviado tu acreditación a la casilla <strong className="underline">{email}</strong>.
+            <p className="m-0 leading-relaxed text-slate-700">
+              Hemos despachado tu acreditación oficial a la casilla <strong className="underline decoration-emerald-400 font-semibold">{email}</strong>.
             </p>
-            <p className="m-0 text-[12px] font-semibold text-emerald-700 leading-snug">
-              👉 Abre tu correo electrónico y haz clic en el botón <strong>"Ingresar a mi Papeleta de Votación"</strong> para acceder directamente a la cabina secreta sin necesidad de digitar códigos.
-            </p>
+            <div className="p-3.5 rounded-xl bg-white/90 border border-emerald-200/80 shadow-xs space-y-2">
+              <p className="m-0 text-[13px] font-semibold text-emerald-900 leading-snug flex items-start gap-2">
+                <span className="text-base leading-none">📧</span>
+                <span>
+                  Por favor, <strong>revisa tu correo electrónico</strong> (incluyendo la carpeta de SPAM o correo no deseado) y haz clic en el enlace <strong>"Ingresar a mi Papeleta de Votación"</strong> para completar tu sufragio de forma segura y directa.
+                </span>
+              </p>
+              <p className="m-0 text-[12px] font-medium text-slate-500 italic pl-6">
+                No necesitas realizar ninguna otra acción en esta pantalla. ¡Agradecemos enormemente tu participación en este proceso democrático!
+              </p>
+            </div>
           </div>
-        ) : errorMessage ? (
-          <p id="login-form-error" role="alert" aria-live="assertive" className="m-0 px-3.5 py-2.5 rounded-xl text-[13px] font-sans font-medium text-red-600 bg-red-50 border border-red-200">
-            {errorMessage}
-          </p>
-        ) : null}
+        ) : (
+          <>
+            {errorMessage ? (
+              <p id="login-form-error" role="alert" aria-live="assertive" className="m-0 px-3.5 py-2.5 rounded-xl text-[13px] font-sans font-medium text-red-600 bg-red-50 border border-red-200">
+                {errorMessage}
+              </p>
+            ) : null}
 
-        <button
-          className="inline-flex items-center justify-center w-full h-11 px-5 rounded-xl bg-[#0b5294] text-white font-sans text-sm font-bold tracking-wide shadow-[0_4px_14px_rgba(11,82,148,0.40),inset_0_1px_0_rgba(255,255,255,0.12)] hover:bg-[#0a4278] hover:shadow-[0_6px_20px_rgba(11,82,148,0.48)] hover:-translate-y-px active:translate-y-0 disabled:opacity-45 disabled:cursor-not-allowed disabled:shadow-none transition-all duration-150 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#0b5294]/20"
-          type="submit"
-          disabled={isSubmitting || isLocked}
-        >
-          {isSubmitting ? <><span className="btn-spinner mr-2" />Validando…</> : 'Continuar →'}
-        </button>
+            <button
+              className="inline-flex items-center justify-center w-full h-11 px-5 rounded-xl bg-[#0b5294] text-white font-sans text-sm font-bold tracking-wide shadow-[0_4px_14px_rgba(11,82,148,0.40),inset_0_1px_0_rgba(255,255,255,0.12)] hover:bg-[#0a4278] hover:shadow-[0_6px_20px_rgba(11,82,148,0.48)] hover:-translate-y-px active:translate-y-0 disabled:opacity-45 disabled:cursor-not-allowed disabled:shadow-none transition-all duration-150 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#0b5294]/20"
+              type="submit"
+              disabled={isSubmitting || isLocked}
+            >
+              {isSubmitting ? <><span className="btn-spinner mr-2" />Validando…</> : 'Continuar →'}
+            </button>
+          </>
+        )}
+
       </form>
     </section>
   );

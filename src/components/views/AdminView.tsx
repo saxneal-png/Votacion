@@ -158,6 +158,8 @@ export function AdminView({
   const [testingConn, setTestingConn] = useState(false);
   const [connTestResult, setConnTestResult] = useState<ConnectionTestResult | null>(null);
   const [scriptCopied, setScriptCopied] = useState(false);
+  const [savingAzureConfig, setSavingAzureConfig] = useState(false);
+  const [saveAzureResult, setSaveAzureResult] = useState<{ success: boolean; message: string } | null>(null);
 
   // Test Send Mail State
   const [sendingTestMail, setSendingTestMail] = useState(false);
@@ -364,6 +366,46 @@ export function AdminView({
       void fetchAzureConfig();
     }
   }, [activeTab, searchQuery, selectedEstamentoFilter, selectedRbdFilter, candidatoSearch, candidatoEstamentoFilter, registroSearch, registroEstamentoFilter, registroRbdFilter]);
+
+  async function handleSaveAzureConfig() {
+    setSavingAzureConfig(true);
+    setSaveAzureResult(null);
+
+    try {
+      const res = await fetch('/api/admin/test-m365-connection', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tenantId: azureTenantId,
+          clientId: azureClientId,
+          clientSecret: azureClientSecret,
+          casillaEmail,
+          useSimulation,
+        }),
+        credentials: 'same-origin',
+      });
+
+      if (res.ok) {
+        setSaveAzureResult({
+          success: true,
+          message: '¡Configuración de Azure M365 y variables de entorno guardadas exitosamente!',
+        });
+      } else {
+        const data = (await res.json().catch(() => ({}))) as { message?: string };
+        setSaveAzureResult({
+          success: false,
+          message: data.message || 'No fue posible guardar la configuración de Azure M365.',
+        });
+      }
+    } catch (err) {
+      setSaveAzureResult({
+        success: false,
+        message: err instanceof Error ? err.message : 'Error al guardar configuración de Azure M365.',
+      });
+    } finally {
+      setSavingAzureConfig(false);
+    }
+  }
 
   async function handleTestAzureConnection(e?: React.FormEvent) {
     if (e) e.preventDefault();
@@ -1507,6 +1549,16 @@ az webapp config appsettings set --resource-group rg-slep-elecciones --name vota
                 <div className="flex flex-wrap justify-end gap-3 pt-2">
                   <button
                     type="button"
+                    onClick={handleSaveAzureConfig}
+                    disabled={savingAzureConfig}
+                    className="h-10 px-5 rounded-xl bg-blue-700 hover:bg-blue-800 text-white font-bold transition flex items-center gap-2 shadow-md disabled:opacity-50"
+                  >
+                    <span className={savingAzureConfig ? 'animate-spin' : ''}>💾</span>
+                    {savingAzureConfig ? 'Guardando...' : 'Guardar Configuración Azure M365'}
+                  </button>
+
+                  <button
+                    type="button"
                     onClick={handleTestSendMail}
                     disabled={sendingTestMail}
                     className="h-10 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold transition flex items-center gap-2 shadow-md disabled:opacity-50"
@@ -1525,6 +1577,21 @@ az webapp config appsettings set --resource-group rg-slep-elecciones --name vota
                   </button>
                 </div>
               </form>
+
+              {/* Resultado de Guardar Configuración */}
+              {saveAzureResult ? (
+                <div
+                  className={`p-4 rounded-xl border text-xs font-bold transition ${
+                    saveAzureResult.success
+                      ? 'bg-emerald-50 border-emerald-300 text-emerald-900'
+                      : 'bg-red-50 border-red-300 text-red-900'
+                  }`}
+                >
+                  {saveAzureResult.success ? '✅ ' : '⚠️ '}
+                  {saveAzureResult.message}
+                </div>
+              ) : null}
+
 
               {/* Resultado Despacho Correo M365 */}
               {testMailResult ? (
