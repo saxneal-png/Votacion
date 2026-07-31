@@ -186,6 +186,26 @@ function getRandomAccentColor(estamento: Estamento): string {
   return colors[Math.floor(Math.random() * colors.length)];
 }
 
+export function getEstamentoVariants(estamento: string): string[] {
+  const clean = (estamento || '').toLowerCase().trim();
+  if (clean === 'apoderados' || clean === 'padres_apoderados' || clean === 'padres y apoderados') {
+    return ['apoderados', 'PADRES_APODERADOS', 'padres_apoderados', 'PADRES Y APODERADOS'];
+  }
+  if (clean === 'docentes' || clean === 'docente') {
+    return ['docentes', 'DOCENTES', 'docente'];
+  }
+  if (clean === 'asistentes' || clean === 'asistente') {
+    return ['asistentes', 'ASISTENTES', 'asistente'];
+  }
+  if (clean === 'directivos' || clean === 'directivo') {
+    return ['directivos', 'DIRECTIVOS', 'directivo'];
+  }
+  if (clean === 'estudiantes' || clean === 'estudiante') {
+    return ['estudiantes', 'ESTUDIANTES', 'estudiante'];
+  }
+  return [estamento, estamento.toLowerCase(), estamento.toUpperCase()];
+}
+
 /**
  * Obtener todos los candidatos con filtros opcionales
  */
@@ -199,7 +219,8 @@ export function getCandidatos({
   let filtered = [...candidatesStore];
 
   if (estamento && estamento !== 'ALL') {
-    filtered = filtered.filter((c) => c.estamento.toLowerCase() === estamento.toLowerCase());
+    const variants = getEstamentoVariants(estamento).map((v) => v.toLowerCase());
+    filtered = filtered.filter((c) => variants.includes(c.estamento.toLowerCase()));
   }
 
   if (search) {
@@ -338,7 +359,8 @@ export async function getCandidatosAsync({
       .order('created_at', { ascending: true });
 
     if (estamento && estamento !== 'ALL') {
-      query = query.eq('estamento', estamento.toLowerCase());
+      const variants = getEstamentoVariants(estamento);
+      query = query.in('estamento', variants);
     }
 
     const { data, error } = await query;

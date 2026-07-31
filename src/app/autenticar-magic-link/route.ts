@@ -21,7 +21,7 @@ export async function GET(request: NextRequest) {
       userRut: payload.rutVotante,
       userEmail: payload.emailDestino,
       userEstamento: payload.estamentoDestino,
-      userFullName: payload.nombreEstablecimiento, // nombre completo no está en payload, usar valor razonable
+      userFullName: payload.nombreVotante || payload.nombreEstablecimiento,
       userRbd: payload.rbdEstablecimiento,
       userOrganization: payload.nombreEstablecimiento,
       userOtp: '', // Ya verificado via magic link, no se requiere OTP

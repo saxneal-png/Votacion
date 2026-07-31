@@ -5,6 +5,7 @@ import { getMockUserByRut } from '@/lib/mock-api';
 export interface TempTokenPayload {
   token: string;
   rutVotante: string;
+  nombreVotante?: string;
   rutEstudiante?: string;
   estamentoDestino: EstamentoDecreto102;
   rbdEstablecimiento: string;
@@ -24,10 +25,15 @@ export interface BlindJwtPayload {
 declare global {
   // eslint-disable-next-line no-var
   var __tempTokensMap: Map<string, TempTokenPayload> | undefined;
+  // eslint-disable-next-line no-var
+  var __consumedTokensSet: Set<string> | undefined;
 }
 
 const tempTokensMap: Map<string, TempTokenPayload> =
   globalThis.__tempTokensMap ?? (globalThis.__tempTokensMap = new Map());
+
+const consumedTokensSet: Set<string> =
+  globalThis.__consumedTokensSet ?? (globalThis.__consumedTokensSet = new Set());
 
 function cleanRut(rut: string): string {
   return rut.replace(/[^0-9kK]/g, '').toUpperCase();
@@ -247,13 +253,19 @@ export function markVotoEmitido(rutVotante: string, estamento: EstamentoDecreto1
 }
 
 /**
- * Crear Token Temporal de Acceso (temp_token UUIDv4) con expiración de 10 minutos
+ * Crear Token Temporal de Acceso stateless con payload codificado y expiración de 10 minutos
  */
 export function createTempToken(
   payload: Omit<TempTokenPayload, 'token' | 'expiresAt'>,
 ): TempTokenPayload {
-  const token = `slep-token-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
   const expiresAt = Date.now() + 10 * 60 * 1000; // 10 Minutos
+  const rawData = {
+    ...payload,
+    expiresAt,
+  };
+  const jsonStr = JSON.stringify(rawData);
+  const b64 = Buffer.from(jsonStr, 'utf-8').toString('base64url');
+  const token = `slep-token-stk.${b64}`;
 
   const fullPayload: TempTokenPayload = {
     ...payload,
@@ -268,7 +280,7 @@ export function createTempToken(
 /**
  * Consumir Token Temporal de Acceso (UN SOLO USO)
  * - Valida vigencia (10 min).
- * - Elimina del mapa (un solo uso).
+ * - Elimina del mapa o decodifica token stateless.
  * - Ejecuta markVotoEmitido en el padrón.
  */
 export function consumeTempToken(
@@ -278,15 +290,36 @@ export function consumeTempToken(
     return { valid: false, reason: 'Token de acceso no proporcionado.' };
   }
 
-  const stored = tempTokensMap.get(token.trim());
+  const cleanTok = token.trim();
+
+  if (consumedTokensSet.has(cleanTok)) {
+    return { valid: false, reason: 'El Enlace Mágico es inválido o ya fue utilizado anteriormente.' };
+  }
+
+  let stored = tempTokensMap.get(cleanTok);
+
+  // Decodificar token stateless si no se encuentra en la RAM de la lambda actual
+  if (!stored && cleanTok.startsWith('slep-token-stk.')) {
+    try {
+      const b64 = cleanTok.replace('slep-token-stk.', '');
+      const jsonStr = Buffer.from(b64, 'base64url').toString('utf-8');
+      const parsed = JSON.parse(jsonStr) as TempTokenPayload;
+      if (parsed.rutVotante && parsed.estamentoDestino && parsed.expiresAt) {
+        stored = { ...parsed, token: cleanTok };
+      }
+    } catch {
+      // Ignorar error de formateo
+    }
+  }
 
   // Soporte para tokens demo simulados estáticos
-  if (!stored && token === 'slep-token-demo-static') {
+  if (!stored && cleanTok === 'slep-token-demo-static') {
     return {
       valid: true,
       payload: {
-        token,
+        token: cleanTok,
         rutVotante: '16940271-k',
+        nombreVotante: 'María González Pérez',
         estamentoDestino: 'DOCENTES',
         rbdEstablecimiento: '10202',
         nombreEstablecimiento: 'Escuela Martín Prado',
@@ -301,12 +334,13 @@ export function consumeTempToken(
   }
 
   if (Date.now() > stored.expiresAt) {
-    tempTokensMap.delete(token.trim());
+    tempTokensMap.delete(cleanTok);
     return { valid: false, reason: 'El Enlace Mágico ha expirado (más de 10 minutos desde su emisión).' };
   }
 
-  // CONSUMO DE UN SOLO USO: Eliminar inmediatamente del mapa
-  tempTokensMap.delete(token.trim());
+  // CONSUMO DE UN SOLO USO: Eliminar del mapa y registrar en consumedTokensSet
+  tempTokensMap.delete(cleanTok);
+  consumedTokensSet.add(cleanTok);
 
   // Marcar el voto como emitido en el padrón oficial
   markVotoEmitido(stored.rutVotante, stored.estamentoDestino);

@@ -237,7 +237,7 @@ export function verifyMagicToken(token: string): { valid: boolean; userRut?: str
     }
   }
 
-  if (token.startsWith('slep-magic-') || token.startsWith('slep-token-')) {
+  if (token.startsWith('slep-magic-test-')) {
     return { valid: true, userRut: '16940271-k', estamento: 'docentes' };
   }
 

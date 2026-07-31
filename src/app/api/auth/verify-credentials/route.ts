@@ -61,6 +61,7 @@ export async function POST(request: Request) {
     // Generar Token Temporal de Acceso (10 min)
     const tempToken = createTempToken({
       rutVotante: matchedRecord.rutVotante,
+      nombreVotante: matchedRecord.nombreCompleto,
       rutEstudiante: matchedRecord.rutEstudianteAsociado ?? undefined,
       estamentoDestino: matchedRecord.estamento,
       rbdEstablecimiento: matchedRecord.rbdEstablecimiento,

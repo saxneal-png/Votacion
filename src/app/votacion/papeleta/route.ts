@@ -34,7 +34,7 @@ export async function GET(request: NextRequest) {
     userRut: payload.rutVotante,
     userEmail: payload.emailDestino,
     userEstamento: payload.estamentoDestino,
-    userFullName: 'Votante Acreditado',
+    userFullName: payload.nombreVotante || 'Votante Acreditado',
     userRbd: payload.rbdEstablecimiento,
     userOrganization: payload.nombreEstablecimiento,
     userOtp: '', // Ya verificado via enlace mágico (magic link)
