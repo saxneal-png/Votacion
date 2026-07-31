@@ -1,11 +1,5 @@
--- ============================================================================
--- SCRIPT DDL OFICIAL SUPABASE / POSTGRESQL - ELECCIONES SLEP (DECRETO N° 102)
--- ============================================================================
-
--- 1. EXTENSIONES REQUERIDAS
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
--- 2. TABLA: PADRÓN ELECTORAL (bd_padron)
 CREATE TABLE IF NOT EXISTS bd_padron (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     rut_votante VARCHAR(15) NOT NULL,
@@ -13,7 +7,7 @@ CREATE TABLE IF NOT EXISTS bd_padron (
     rut_estudiante_asociado VARCHAR(15),
     formatted_rut_estudiante VARCHAR(20),
     nombre_completo VARCHAR(255) NOT NULL,
-    estamento VARCHAR(50) NOT NULL CHECK (estamento IN ('PADRES_APODERADOS', 'DOCENTES', 'ASISTENTES', 'DIRECTIVOS', 'ESTUDIANTES')),
+    estamento VARCHAR(50) NOT NULL,
     rbd_establecimiento VARCHAR(20) NOT NULL,
     nombre_establecimiento VARCHAR(255) NOT NULL,
     habilitado BOOLEAN DEFAULT TRUE,
@@ -22,13 +16,10 @@ CREATE TABLE IF NOT EXISTS bd_padron (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- Índices de alto rendimiento para validación Decreto 102
 CREATE INDEX IF NOT EXISTS idx_padron_rut_votante ON bd_padron(rut_votante);
 CREATE INDEX IF NOT EXISTS idx_padron_apoderado_estudiante ON bd_padron(rut_votante, rut_estudiante_asociado);
 CREATE INDEX IF NOT EXISTS idx_padron_estamento ON bd_padron(estamento);
 
--- 3. TABLA: ACTA OFICIAL DE SUFRAGIO CON FOLIO (acta_sufragio)
--- Preserva el secreto del voto al NO almacenar la preferencia emitida
 CREATE TABLE IF NOT EXISTS acta_sufragio (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     folio VARCHAR(50) UNIQUE NOT NULL,
@@ -44,7 +35,6 @@ CREATE TABLE IF NOT EXISTS acta_sufragio (
 CREATE INDEX IF NOT EXISTS idx_acta_folio ON acta_sufragio(folio);
 CREATE INDEX IF NOT EXISTS idx_acta_rut ON acta_sufragio(rut_votante);
 
--- 4. TABLA: URNA ANÓNIMA DE VOTOS (votos_anonimos)
 CREATE TABLE IF NOT EXISTS votos_anonimos (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     estamento VARCHAR(50) NOT NULL,
@@ -52,7 +42,6 @@ CREATE TABLE IF NOT EXISTS votos_anonimos (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- 5. TABLA: REGISTRO DE PARTICIPACIÓN (registro_participacion)
 CREATE TABLE IF NOT EXISTS registro_participacion (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     rut VARCHAR(15) NOT NULL,
@@ -60,7 +49,6 @@ CREATE TABLE IF NOT EXISTS registro_participacion (
     voted_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- 6. TABLA: CANDIDATURAS (candidatos)
 CREATE TABLE IF NOT EXISTS candidatos (
     id VARCHAR(100) PRIMARY KEY,
     nombre_completo VARCHAR(255) NOT NULL,
@@ -73,7 +61,6 @@ CREATE TABLE IF NOT EXISTS candidatos (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- 7. TABLA: BITÁCORA DE AUDITORÍA (bitacora_auditoria)
 CREATE TABLE IF NOT EXISTS bitacora_auditoria (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     timestamp BIGINT NOT NULL,
@@ -83,7 +70,6 @@ CREATE TABLE IF NOT EXISTS bitacora_auditoria (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- 8. DATOS INICIALES DE CANDIDATOS POR DEFECTO
 INSERT INTO candidatos (id, nombre_completo, cargo_role, slogan_propuesta, iniciales, color_acento, estamento)
 VALUES
 ('pablo-reyes', 'Pablo Reyes', 'Director establecimiento zona norte', 'Liderazgo pedagógico centrado en resultados colectivos.', 'PR', '#1a4a7a', 'directivos'),
