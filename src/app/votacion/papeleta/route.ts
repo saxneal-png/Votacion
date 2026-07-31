@@ -29,8 +29,16 @@ export async function GET(request: NextRequest) {
     rbdEstablecimiento: payload.rbdEstablecimiento,
   });
 
-  // Habilitar sesión de sufragio cifrada
-  const sessionId = createSession(payload.rutVotante);
+  // Habilitar sesión de sufragio cifrada con todos los datos del votante
+  const sessionId = createSession({
+    userRut: payload.rutVotante,
+    userEmail: payload.emailDestino,
+    userEstamento: payload.estamentoDestino,
+    userFullName: 'Votante Acreditado',
+    userRbd: payload.rbdEstablecimiento,
+    userOrganization: payload.nombreEstablecimiento,
+    userOtp: '', // Ya verificado via enlace mágico (magic link)
+  });
   markOtpVerified(sessionId);
 
   const response = NextResponse.redirect(`${origin}/?cabina=true&blind_token=${encodeURIComponent(blindToken)}`);
