@@ -139,10 +139,12 @@ export function AdminView({
   // Formulario Candidato
   const [formCandNombre, setFormCandNombre] = useState('');
   const [formCandEstamento, setFormCandEstamento] = useState<Estamento>('docentes');
+  const [formCandRbd, setFormCandRbd] = useState('');
   const [formCandEscuela, setFormCandEscuela] = useState('');
   const [formCandBiografia, setFormCandBiografia] = useState('');
   const [formCandPropuesta, setFormCandPropuesta] = useState('');
   const [formCandFoto, setFormCandFoto] = useState('');
+
 
   // Modal Eliminación Candidato
   const [showDeleteCandModal, setShowDeleteCandModal] = useState(false);
@@ -577,10 +579,56 @@ export function AdminView({
   }
 
   // Candidatos CRUD Handlers
+  function handleRbdChange(rbdVal: string) {
+    setFormCandRbd(rbdVal);
+    const cleanRbd = rbdVal.trim();
+    if (!cleanRbd) return;
+
+    // 1. Buscar en registros del padrón cargado
+    const matchFromPadron = padronRecords.find(
+      (r) => r.rbdEstablecimiento === cleanRbd,
+    );
+    if (matchFromPadron && matchFromPadron.nombreEstablecimiento) {
+      setFormCandEscuela(matchFromPadron.nombreEstablecimiento);
+      return;
+    }
+
+    // 2. Buscar en escuelas de los filtros
+    const matchFromFilter = availableSchools.find((s) => s.rbd === cleanRbd);
+    if (matchFromFilter && matchFromFilter.nombre) {
+      setFormCandEscuela(matchFromFilter.nombre);
+      return;
+    }
+
+    // 3. Mapa de RBDs conocidos del SLEP
+    const knownRbdMap: Record<string, string> = {
+      '10201': 'Liceo Roberto Humeres Noble',
+      '10202': 'Escuela Martín Prado',
+      '10203': 'Colegio República de Costa Rica',
+      '10204': 'Liceo José Victorino Lastarria',
+      '10205': 'Liceo Carmela Carvajal de Prat',
+      '10206': 'Colegio de Aplicación Artística y Cultural',
+      '10207': 'Liceo de Aplicación Pablo Neruda',
+      '10208': 'Escuela Básica República de Paraguay',
+      '10209': 'Escuela San Ignacio de Loyola',
+      '10210': 'Escuela Los Almendros',
+      '10211': 'Escuela Manuel Barros Borgoño',
+      '10212': 'Liceo Darío Salas',
+      '10213': 'Escuela Presidente Balmaceda',
+      '10214': 'Escuela Básica República del Ecuador',
+      '10215': 'Escuela Club Atlético Santiago',
+    };
+
+    if (knownRbdMap[cleanRbd]) {
+      setFormCandEscuela(knownRbdMap[cleanRbd]);
+    }
+  }
+
   function handleOpenCreateCandidate() {
     setEditingCandidate(null);
     setFormCandNombre('');
     setFormCandEstamento('docentes');
+    setFormCandRbd('');
     setFormCandEscuela('');
     setFormCandBiografia('');
     setFormCandPropuesta('');
@@ -594,6 +642,7 @@ export function AdminView({
     setEditingCandidate(c);
     setFormCandNombre(c.nombreCompleto || c.name);
     setFormCandEstamento(c.estamento);
+    setFormCandRbd(c.rbd || '');
     setFormCandEscuela(c.escuelaEstablecimiento || c.role);
     setFormCandBiografia(c.biografia || '');
     setFormCandPropuesta(c.propuestaPrincipal || c.slogan);
@@ -602,6 +651,7 @@ export function AdminView({
     setCandSuccess(false);
     setShowCandidateModal(true);
   }
+
 
   async function handleSaveCandidate(e: React.FormEvent) {
     e.preventDefault();
@@ -623,11 +673,13 @@ export function AdminView({
         id: editingCandidate?.id,
         nombreCompleto: formCandNombre.trim(),
         estamento: formCandEstamento,
+        rbd: formCandRbd.trim(),
         escuelaEstablecimiento: formCandEscuela.trim(),
         biografia: formCandBiografia.trim(),
         propuestaPrincipal: formCandPropuesta.trim(),
         fotoPerfil: formCandFoto.trim() || undefined,
       };
+
 
       const res = await fetch(url, {
         method,
@@ -2004,7 +2056,7 @@ CMD ["npm", "start"]`}
                 />
               </label>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <label className="grid gap-1 font-bold text-slate-700">
                   <span>Estamento *</span>
                   <select
@@ -2021,17 +2073,30 @@ CMD ["npm", "start"]`}
                 </label>
 
                 <label className="grid gap-1 font-bold text-slate-700">
-                  <span>Escuela / Establecimiento *</span>
+                  <span>RBD Colegio *</span>
                   <input
                     type="text"
-                    className="h-10 px-3 rounded-xl border border-slate-300 font-sans"
-                    placeholder="Ej: Liceo Bicentenario"
+                    className="h-10 px-3 rounded-xl border border-slate-300 font-mono"
+                    placeholder="Ej: 10202"
+                    value={formCandRbd}
+                    onChange={(e) => handleRbdChange(e.target.value)}
+                    required
+                  />
+                </label>
+
+                <label className="grid gap-1 font-bold text-slate-700">
+                  <span>Nombre Colegio (Auto) *</span>
+                  <input
+                    type="text"
+                    className="h-10 px-3 rounded-xl border border-slate-300 font-sans bg-slate-50 focus:bg-white"
+                    placeholder="Auto por RBD"
                     value={formCandEscuela}
                     onChange={(e) => setFormCandEscuela(e.target.value)}
                     required
                   />
                 </label>
               </div>
+
 
               <label className="grid gap-1 font-bold text-slate-700">
                 <span>Propuesta Principal para el Consejo Local *</span>

@@ -8,11 +8,26 @@ import {
   validateApoderadoAuth,
   validateFuncionarioAuth,
 } from '@/services/authRulesService';
-import { getPadronRecords } from '@/lib/padron-store';
+import { addSingleVoter, clearPadronStore, getPadronRecords } from '@/lib/padron-store';
 
 describe('Motor de Reglas de Autenticación, Multirrol y Sufragio Único (Decreto 102)', () => {
   beforeEach(() => {
-    // Resetear registros del padrón para garantizar entorno limpio
+    clearPadronStore();
+    addSingleVoter({
+      rutVotante: '12.345.678-5',
+      rutEstudianteAsociado: '23.456.789-6',
+      nombreCompleto: 'Verónica Alarcón Fuentes',
+      estamento: 'PADRES_APODERADOS',
+      rbdEstablecimiento: '10202',
+      nombreEstablecimiento: 'Escuela Martín Prado',
+    });
+    addSingleVoter({
+      rutVotante: '16.940.271-K',
+      nombreCompleto: 'María González Pérez',
+      estamento: 'DOCENTES',
+      rbdEstablecimiento: '10202',
+      nombreEstablecimiento: 'Escuela Martín Prado',
+    });
     const records = getPadronRecords().records;
     records.forEach((r) => {
       r.haVotado = false;
@@ -20,30 +35,32 @@ describe('Motor de Reglas de Autenticación, Multirrol y Sufragio Único (Decret
     });
   });
 
+
   describe('Regla A: Estamento Padres y Apoderados', () => {
-    it('valida correctamente el par (Apoderado 14567890-1, Estudiante 23456789-2)', () => {
-      const record = validateApoderadoAuth('14.567.890-1', '23.456.789-2', 'apoderado@gmail.com');
+    it('valida correctamente el par (Apoderado 12345678-5, Estudiante 23456789-6)', () => {
+      const record = validateApoderadoAuth('12.345.678-5', '23.456.789-6', 'apoderado@gmail.com');
       expect(record).toBeDefined();
       expect(record.estamento).toBe('PADRES_APODERADOS');
-      expect(record.formattedRutVotante).toBe('14.567.890-1');
+      expect(record.formattedRutVotante).toBe('12.345.678-5');
     });
 
     it('rechaza cuando el RUN de estudiante no coincide con el apoderado', () => {
       expect(() => {
-        validateApoderadoAuth('14567890-1', '99999999-9', 'apoderado@gmail.com');
+        validateApoderadoAuth('12345678-5', '99999999-9', 'apoderado@gmail.com');
       }).toThrow('El RUN del apoderado no se encuentra registrado o no está vinculado');
     });
 
-
     it('aplica Sufragio Único Multihijo: bloquea si cualquier registro del apoderado ya sufragó', () => {
       // Simular que el apoderado ya sufragó por su primer hijo
-      markVotoEmitido('14567890-1', 'PADRES_APODERADOS');
+      markVotoEmitido('12345678-5', 'PADRES_APODERADOS');
 
       expect(() => {
-        validateApoderadoAuth('14567890-1', '23456789-2', 'apoderado@gmail.com');
+        validateApoderadoAuth('12345678-5', '23456789-6', 'apoderado@gmail.com');
       }).toThrow('Usted ya emitió su voto correspondiente al estamento de Padres y Apoderados.');
     });
   });
+
+
 
   describe('Regla B: Estamento Funcionarios SLEP y Dominio Restrictivo', () => {
     it('exige obligatoriamente el dominio @eduvallediguillin.gob.cl', () => {

@@ -39,12 +39,23 @@ describe('padron-store', () => {
   });
 
   it('calcula el Quórum inicial del 30% por estamento', () => {
+    addSingleVoter({
+      rutVotante: '12.345.678-5',
+      rutEstudianteAsociado: '23.456.789-6',
+      nombreCompleto: 'Verónica Alarcón Fuentes',
+      estamento: 'PADRES_APODERADOS',
+      rbdEstablecimiento: '10202',
+      nombreEstablecimiento: 'Escuela Martín Prado',
+    });
     const quorums = calculateEstamentoQuorums();
     expect(quorums.length).toBe(5);
     const apoderadosQuorum = quorums.find((q) => q.estamento === 'PADRES_APODERADOS');
     expect(apoderadosQuorum).toBeDefined();
-    expect(apoderadosQuorum?.quorum30Requerido).toBeGreaterThan(0);
+    expect(apoderadosQuorum?.quorum30Requerido).toBeGreaterThanOrEqual(1);
   });
+
+
+
 
   it('agrega un votante manualmente y permite alternar su habilitación', () => {
     const newVoter = addSingleVoter({

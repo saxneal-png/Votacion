@@ -54,87 +54,12 @@ declare global {
   var __padronStore: PadronRecord[] | undefined;
 }
 
-// Registros iniciales de demostración
-const INITIAL_MOCK_PADRON: PadronRecord[] = [
-  {
-    id: 'padron-1',
-    rutVotante: '123456785',
-    formattedRutVotante: '12.345.678-5',
-    rutEstudianteAsociado: null,
-    formattedRutEstudiante: null,
-    nombreCompleto: 'Carlos Muñoz Reyes',
-    estamento: 'DIRECTIVOS',
-    rbdEstablecimiento: '10201',
-    nombreEstablecimiento: 'Liceo Roberto Humeres Noble',
-    habilitado: true,
-    haVotado: false,
-    fechaVoto: null,
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: 'padron-2',
-    rutVotante: '16940271K',
-    formattedRutVotante: '16.940.271-K',
-    rutEstudianteAsociado: null,
-    formattedRutEstudiante: null,
-    nombreCompleto: 'María González Pérez',
-    estamento: 'DOCENTES',
-    rbdEstablecimiento: '10202',
-    nombreEstablecimiento: 'Escuela Martín Prado',
-    habilitado: true,
-    haVotado: false,
-    fechaVoto: null,
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: 'padron-3',
-    rutVotante: '198765430',
-    formattedRutVotante: '19.876.543-0',
-    rutEstudianteAsociado: null,
-    formattedRutEstudiante: null,
-    nombreCompleto: 'Ana Soto Vidal',
-    estamento: 'ASISTENTES',
-    rbdEstablecimiento: '10203',
-    nombreEstablecimiento: 'Colegio República de Costa Rica',
-    habilitado: true,
-    haVotado: false,
-    fechaVoto: null,
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: 'padron-4',
-    rutVotante: '145678901',
-    formattedRutVotante: '14.567.890-1',
-    rutEstudianteAsociado: '234567892',
-    formattedRutEstudiante: '23.456.789-2',
-    nombreCompleto: 'Verónica Alarcón Fuentes',
-    estamento: 'PADRES_APODERADOS',
-    rbdEstablecimiento: '10202',
-    nombreEstablecimiento: 'Escuela Martín Prado',
-    habilitado: true,
-    haVotado: false,
-    fechaVoto: null,
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: 'padron-5',
-    rutVotante: '234567892',
-    formattedRutVotante: '23.456.789-2',
-    rutEstudianteAsociado: null,
-    formattedRutEstudiante: null,
-    nombreCompleto: 'Tomás Silva Alarcón',
-    estamento: 'ESTUDIANTES',
-    rbdEstablecimiento: '10202',
-    nombreEstablecimiento: 'Escuela Martín Prado',
-    habilitado: true,
-    haVotado: false,
-    fechaVoto: null,
-    createdAt: new Date().toISOString(),
-  },
-];
+// Registros iniciales vacíos (únicamente registros reales cargados de Supabase o Excel)
+const INITIAL_MOCK_PADRON: PadronRecord[] = [];
 
 const padronStore: PadronRecord[] =
   globalThis.__padronStore ?? (globalThis.__padronStore = INITIAL_MOCK_PADRON);
+
 
 /**
  * Normaliza cualquier texto de estamento a los 5 Enums estrictos del Decreto N° 102

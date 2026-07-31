@@ -20,6 +20,7 @@ export interface Candidate {
   biografia?: string;
   propuestaPrincipal?: string;
   escuelaEstablecimiento?: string;
+  rbd?: string;
   fotoPerfil?: string;
 }
 
