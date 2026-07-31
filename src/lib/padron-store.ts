@@ -753,6 +753,47 @@ export function resetPadronVotes() {
   });
 }
 
+export async function resetPadronVotesAsync(): Promise<void> {
+  resetPadronVotes();
+  try {
+    const { error } = await supabaseAdmin
+      .from('bd_padron')
+      .update({ ha_votado: false, fecha_voto: null })
+      .neq('id', '00000000-0000-0000-0000-000000000000');
+
+    if (error) {
+      console.error('[SUPABASE] Error al resetear ha_votado en bd_padron:', error.message);
+    } else {
+      console.log('[SUPABASE] Estado de votos en bd_padron reseteado a cero.');
+    }
+  } catch (err) {
+    console.error('[SUPABASE] Excepción en resetPadronVotesAsync:', err);
+  }
+}
+
+export function clearPadronStore(): void {
+  padronStore.length = 0;
+}
+
+export async function clearPadronStoreAsync(): Promise<void> {
+  clearPadronStore();
+  try {
+    const { error } = await supabaseAdmin
+      .from('bd_padron')
+      .delete()
+      .neq('id', '00000000-0000-0000-0000-000000000000');
+
+    if (error) {
+      console.error('[SUPABASE] Error al vaciar bd_padron:', error.message);
+    } else {
+      console.log('[SUPABASE] Padrón electoral eliminado masivamente.');
+    }
+  } catch (err) {
+    console.error('[SUPABASE] Excepción en clearPadronStoreAsync:', err);
+  }
+}
+
+
 // ===========================================================================
 // FUNCIONES ASÍNCRONAS CON PERSISTENCIA EN SUPABASE (bd_padron)
 // ===========================================================================

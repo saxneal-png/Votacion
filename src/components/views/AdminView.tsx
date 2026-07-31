@@ -178,6 +178,11 @@ export function AdminView({
   const [resetError, setResetError] = useState<string | null>(null);
   const [resetSuccessMessage, setResetSuccessMessage] = useState<string | null>(null);
 
+  // Modal Eliminación Masiva de Padrón State
+  const [showClearPadronModal, setShowClearPadronModal] = useState(false);
+  const [clearingPadron, setClearingPadron] = useState(false);
+
+
   // Registro de Votación con Folios State
   const [registroRecords, setRegistroRecords] = useState<VotingRecordEntry[]>([]);
   const [loadingRegistro, setLoadingRegistro] = useState(false);
@@ -235,8 +240,10 @@ export function AdminView({
         setResetSuccessMessage(data.message);
         setShowResetElectionModal(false);
         setResetAdminPin('');
-        void fetchPadron();
-        void fetchRegistro();
+        await fetchPadron();
+        await fetchRegistro();
+        await fetchCandidatos();
+        await fetchMetrics();
         onRefresh();
       } else {
         setResetError(data.message || 'No fue posible reiniciar la votación.');
@@ -247,6 +254,30 @@ export function AdminView({
       setResettingElection(false);
     }
   }
+
+  async function handleClearPadron() {
+    setClearingPadron(true);
+    try {
+      const res = await fetch('/api/admin/padron?all=true', {
+        method: 'DELETE',
+        credentials: 'same-origin',
+      });
+
+      if (res.ok) {
+        setShowClearPadronModal(false);
+        await fetchPadron();
+        await fetchMetrics();
+      } else {
+        const data = (await res.json().catch(() => ({}))) as { message?: string };
+        alert(data.message || 'No fue posible eliminar el padrón.');
+      }
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Error al vaciar padrón.');
+    } finally {
+      setClearingPadron(false);
+    }
+  }
+
 
   async function handleTestSendMail() {
     const emailPrueba = prompt(
@@ -972,7 +1003,16 @@ az webapp config appsettings set --resource-group rg-slep-elecciones --name vota
                 >
                   <span>📤</span> Cargar Padrón Excel (.xlsm / .xlsx)
                 </button>
+
+                <button
+                  type="button"
+                  onClick={() => setShowClearPadronModal(true)}
+                  className="h-10 px-4 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-bold transition flex items-center gap-1.5 shadow-sm"
+                >
+                  <span>🗑️</span> Eliminar Padrón Completo
+                </button>
               </div>
+
             </div>
 
             {/* Tabla del Padrón Electoral */}
@@ -2178,6 +2218,45 @@ CMD ["npm", "start"]`}
           </div>
         </div>
       ) : null}
+
+      {/* Modal Eliminación Masiva de Padrón */}
+      {showClearPadronModal ? (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl border border-slate-200 animate-fade-in">
+            <div className="flex items-center gap-3 text-red-600">
+              <span className="text-2xl">⚠️</span>
+              <h3 className="font-extrabold text-base text-slate-900">¿Eliminar todo el Padrón Electoral?</h3>
+            </div>
+            <p className="text-xs text-slate-600 leading-relaxed">
+              Esta acción eliminará de forma permanente <strong>todos los registros de votantes</strong> del Padrón Electoral tanto en la base de datos Supabase PostgreSQL como en la memoria del sistema.
+            </p>
+            <div className="p-3 bg-red-50 rounded-xl border border-red-200 text-[11px] font-bold text-red-800">
+              ⚡ Esta acción no se puede deshacer. Tendrás que volver a cargar el padrón mediante archivo Excel.
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowClearPadronModal(false)}
+                disabled={clearingPadron}
+                className="px-4 py-2 rounded-xl border border-slate-300 text-xs font-bold text-slate-700 hover:bg-slate-50 transition"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleClearPadron}
+                disabled={clearingPadron}
+                className="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-extrabold transition flex items-center gap-2 shadow-md disabled:opacity-50"
+              >
+                <span className={clearingPadron ? 'animate-spin' : ''}>🗑️</span>
+                {clearingPadron ? 'Eliminando Padrón...' : 'Sí, Eliminar Padrón Completo'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
+

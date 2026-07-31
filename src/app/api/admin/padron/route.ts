@@ -112,6 +112,16 @@ export async function DELETE(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');
+    const clearAll = searchParams.get('all') === 'true' || id === 'all';
+
+    if (clearAll) {
+      const { clearPadronStoreAsync } = await import('@/lib/padron-store');
+      await clearPadronStoreAsync();
+      return NextResponse.json({
+        success: true,
+        message: 'El Padrón Electoral completo ha sido eliminado exitosamente.',
+      });
+    }
 
     if (!id) {
       return NextResponse.json(
