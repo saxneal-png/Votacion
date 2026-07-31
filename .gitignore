@@ -1,0 +1,17 @@
+# Ignorar carpetas
+node_modules/
+.next/
+out/
+bin/
+obj/
+
+# Ignorar archivos específicos
+.env
+.env*.local
+.env.local
+.DS_Store
+*.log
+
+# Ignorar archivos de configuración de IDEs
+.vscode/
+.idea/

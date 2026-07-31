@@ -1,0 +1,753 @@
+import * as XLSX from 'xlsx';
+import { cleanAndValidateRUT, formatRut } from '@/lib/rut-validator';
+
+export type EstamentoDecreto102 =
+  | 'ESTUDIANTES'
+  | 'PADRES_APODERADOS'
+  | 'DOCENTES'
+  | 'ASISTENTES'
+  | 'DIRECTIVOS';
+
+export interface PadronRecord {
+  id: string;
+  rutVotante: string;
+  formattedRutVotante: string;
+  rutEstudianteAsociado: string | null;
+  formattedRutEstudiante: string | null;
+  nombreCompleto: string;
+  estamento: EstamentoDecreto102;
+  rbdEstablecimiento: string;
+  nombreEstablecimiento: string;
+  habilitado: boolean;
+  haVotado: boolean;
+  fechaVoto: string | null;
+  createdAt: string;
+}
+
+export interface QuorumEstamentoStatus {
+  estamento: EstamentoDecreto102;
+  label: string;
+  padronTotal: number;
+  quorum30Requerido: number;
+  votosEmitidos: number;
+  porcentajeParticipacion: number;
+  quorumAlcanzado: boolean;
+}
+
+export interface SchoolFilterOption {
+  rbd: string;
+  nombre: string;
+}
+
+export interface ExcelProcessingResult {
+  success: boolean;
+  totalFilas: number;
+  registrosInsertados: number;
+  registrosRechazados: number;
+  quorums: QuorumEstamentoStatus[];
+  erroresDetalle: Array<{ fila: number; rut?: string; motivo: string }>;
+}
+
+declare global {
+  // eslint-disable-next-line no-var
+  var __padronStore: PadronRecord[] | undefined;
+}
+
+// Registros iniciales de demostración
+const INITIAL_MOCK_PADRON: PadronRecord[] = [
+  {
+    id: 'padron-1',
+    rutVotante: '123456785',
+    formattedRutVotante: '12.345.678-5',
+    rutEstudianteAsociado: null,
+    formattedRutEstudiante: null,
+    nombreCompleto: 'Carlos Muñoz Reyes',
+    estamento: 'DIRECTIVOS',
+    rbdEstablecimiento: '10201',
+    nombreEstablecimiento: 'Liceo Roberto Humeres Noble',
+    habilitado: true,
+    haVotado: false,
+    fechaVoto: null,
+    createdAt: new Date().toISOString(),
+  },
+  {
+    id: 'padron-2',
+    rutVotante: '16940271K',
+    formattedRutVotante: '16.940.271-K',
+    rutEstudianteAsociado: null,
+    formattedRutEstudiante: null,
+    nombreCompleto: 'María González Pérez',
+    estamento: 'DOCENTES',
+    rbdEstablecimiento: '10202',
+    nombreEstablecimiento: 'Escuela Martín Prado',
+    habilitado: true,
+    haVotado: true,
+    fechaVoto: new Date(Date.now() - 3600000).toISOString(),
+    createdAt: new Date().toISOString(),
+  },
+  {
+    id: 'padron-3',
+    rutVotante: '198765430',
+    formattedRutVotante: '19.876.543-0',
+    rutEstudianteAsociado: null,
+    formattedRutEstudiante: null,
+    nombreCompleto: 'Ana Soto Vidal',
+    estamento: 'ASISTENTES',
+    rbdEstablecimiento: '10203',
+    nombreEstablecimiento: 'Colegio República de Costa Rica',
+    habilitado: true,
+    haVotado: false,
+    fechaVoto: null,
+    createdAt: new Date().toISOString(),
+  },
+  {
+    id: 'padron-4',
+    rutVotante: '145678901',
+    formattedRutVotante: '14.567.890-1',
+    rutEstudianteAsociado: '234567892',
+    formattedRutEstudiante: '23.456.789-2',
+    nombreCompleto: 'Verónica Alarcón Fuentes',
+    estamento: 'PADRES_APODERADOS',
+    rbdEstablecimiento: '10202',
+    nombreEstablecimiento: 'Escuela Martín Prado',
+    habilitado: true,
+    haVotado: true,
+    fechaVoto: new Date(Date.now() - 7200000).toISOString(),
+    createdAt: new Date().toISOString(),
+  },
+  {
+    id: 'padron-5',
+    rutVotante: '234567892',
+    formattedRutVotante: '23.456.789-2',
+    rutEstudianteAsociado: null,
+    formattedRutEstudiante: null,
+    nombreCompleto: 'Tomás Silva Alarcón',
+    estamento: 'ESTUDIANTES',
+    rbdEstablecimiento: '10202',
+    nombreEstablecimiento: 'Escuela Martín Prado',
+    habilitado: true,
+    haVotado: false,
+    fechaVoto: null,
+    createdAt: new Date().toISOString(),
+  },
+];
+
+const padronStore: PadronRecord[] =
+  globalThis.__padronStore ?? (globalThis.__padronStore = INITIAL_MOCK_PADRON);
+
+/**
+ * Normaliza cualquier texto de estamento a los 5 Enums estrictos del Decreto N° 102
+ */
+export function normalizeEstamentoDecreto102(rawEstamento: string): EstamentoDecreto102 | null {
+  if (!rawEstamento) return null;
+  const sanitized = String(rawEstamento).trim().toUpperCase();
+
+  if (
+    sanitized.includes('ESTUDIANTE') ||
+    sanitized.includes('ALUMNO') ||
+    sanitized.includes('PUPILO') ||
+    sanitized === 'EST'
+  ) {
+    return 'ESTUDIANTES';
+  }
+  if (
+    sanitized.includes('PADRE') ||
+    sanitized.includes('APODERADO') ||
+    sanitized.includes('FAMILIAR') ||
+    sanitized.includes('TUTOR') ||
+    sanitized.includes('PADRES_APODERADOS') ||
+    sanitized === 'APO'
+  ) {
+    return 'PADRES_APODERADOS';
+  }
+  if (
+    sanitized.includes('DOCENTE') ||
+    sanitized.includes('PROFESOR') ||
+    sanitized.includes('MAESTRO') ||
+    sanitized.includes('EDUCADOR') ||
+    sanitized === 'DOC'
+  ) {
+    return 'DOCENTES';
+  }
+  if (
+    sanitized.includes('ASISTENTE') ||
+    sanitized.includes('PARADOCENTE') ||
+    sanitized.includes('ADMINISTRATIVO') ||
+    sanitized === 'ASI'
+  ) {
+    return 'ASISTENTES';
+  }
+  if (
+    sanitized.includes('DIRECTIV') ||
+    sanitized.includes('DIRECTOR') ||
+    sanitized.includes('JEFE UTP') ||
+    sanitized.includes('EQUIPO DIRECTIVO') ||
+    sanitized === 'DIR'
+  ) {
+    return 'DIRECTIVOS';
+  }
+
+  return null;
+}
+
+/**
+ * Calcula el Quórum inicial del 30% por estamento
+ */
+export function calculateEstamentoQuorums(records: PadronRecord[] = padronStore): QuorumEstamentoStatus[] {
+  const estamentoMeta: Array<{ estamento: EstamentoDecreto102; label: string }> = [
+    { estamento: 'ESTUDIANTES', label: 'Estudiantes' },
+    { estamento: 'PADRES_APODERADOS', label: 'Padres y Apoderados' },
+    { estamento: 'DOCENTES', label: 'Docentes' },
+    { estamento: 'ASISTENTES', label: 'Asistentes de la Educación' },
+    { estamento: 'DIRECTIVOS', label: 'Directivos' },
+  ];
+
+  return estamentoMeta.map(({ estamento, label }) => {
+    const recordsByEstamento = records.filter((r) => r.estamento === estamento && r.habilitado);
+    const padronTotal = recordsByEstamento.length;
+    const quorum30Requerido = Math.ceil(padronTotal * 0.3);
+    const votosEmitidos = recordsByEstamento.filter((r) => r.haVotado).length;
+    const porcentajeParticipacion = padronTotal > 0 ? Number(((votosEmitidos / padronTotal) * 100).toFixed(1)) : 0;
+
+    return {
+      estamento,
+      label,
+      padronTotal,
+      quorum30Requerido,
+      votosEmitidos,
+      porcentajeParticipacion,
+      quorumAlcanzado: votosEmitidos >= quorum30Requerido && quorum30Requerido > 0,
+    };
+  });
+}
+
+/**
+ * Extrae de forma dinámica todos los establecimientos reales presentes en el padrón
+ */
+export function getAvailableSchools(records: PadronRecord[] = padronStore): SchoolFilterOption[] {
+  const map = new Map<string, string>();
+  records.forEach((r) => {
+    if (r.rbdEstablecimiento && r.nombreEstablecimiento) {
+      map.set(r.rbdEstablecimiento, r.nombreEstablecimiento);
+    }
+  });
+
+  return Array.from(map.entries()).map(([rbd, nombre]) => ({ rbd, nombre }));
+}
+
+/**
+ * Obtiene el padrón completo con opciones de filtrado y búsqueda
+ */
+export function getPadronRecords({
+  search = '',
+  estamento = '',
+  rbd = '',
+}: {
+  search?: string;
+  estamento?: string;
+  rbd?: string;
+} = {}): {
+  records: PadronRecord[];
+  total: number;
+  quorums: QuorumEstamentoStatus[];
+  schools: SchoolFilterOption[];
+} {
+  let filtered = [...padronStore];
+
+  if (search) {
+    const q = search.toLowerCase().trim();
+    filtered = filtered.filter(
+      (r) =>
+        r.nombreCompleto.toLowerCase().includes(q) ||
+        r.rutVotante.toLowerCase().includes(q) ||
+        r.formattedRutVotante.toLowerCase().includes(q) ||
+        (r.rutEstudianteAsociado && r.rutEstudianteAsociado.toLowerCase().includes(q)),
+    );
+  }
+
+  if (estamento && estamento !== 'ALL') {
+    filtered = filtered.filter((r) => r.estamento === estamento);
+  }
+
+  if (rbd && rbd !== 'ALL') {
+    filtered = filtered.filter((r) => r.rbdEstablecimiento === rbd);
+  }
+
+  return {
+    records: filtered,
+    total: filtered.length,
+    quorums: calculateEstamentoQuorums(padronStore),
+    schools: getAvailableSchools(padronStore),
+  };
+}
+
+/**
+ * Agrega un nuevo votante al padrón con validación Módulo 11 y Decreto 102
+ */
+export function addSingleVoter(data: {
+  rutVotante: string;
+  rutEstudianteAsociado?: string;
+  nombreCompleto: string;
+  estamento: EstamentoDecreto102;
+  rbdEstablecimiento: string;
+  nombreEstablecimiento: string;
+}): PadronRecord {
+  const rutValidation = cleanAndValidateRUT(data.rutVotante);
+  if (!rutValidation.valid) {
+    throw new Error(`RUN de votante inválido: ${rutValidation.errorReason}`);
+  }
+
+  let studentRutClean: string | null = null;
+  let studentRutFormatted: string | null = null;
+
+  if (data.estamento === 'PADRES_APODERADOS') {
+    if (!data.rutEstudianteAsociado) {
+      throw new Error(
+        'Regla Decreto 102: Para el estamento Padres y Apoderados es obligatorio proporcionar el RUN del Estudiante asociado.',
+      );
+    }
+    const studentValidation = cleanAndValidateRUT(data.rutEstudianteAsociado);
+    if (!studentValidation.valid) {
+      throw new Error(`RUN del estudiante asociado inválido: ${studentValidation.errorReason}`);
+    }
+    studentRutClean = studentValidation.cleanRut;
+    studentRutFormatted = studentValidation.formattedRut;
+  }
+
+  // Comprobar duplicidad
+  const duplicate = padronStore.find((r) => {
+    if (r.estamento !== data.estamento) return false;
+    if (data.estamento === 'PADRES_APODERADOS') {
+      return r.rutVotante === rutValidation.cleanRut && r.rutEstudianteAsociado === studentRutClean;
+    }
+    return r.rutVotante === rutValidation.cleanRut;
+  });
+
+  if (duplicate) {
+    throw new Error('Ya existe un registro con las mismas claves de identificación en este estamento.');
+  }
+
+  const newRecord: PadronRecord = {
+    id: `padron-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+    rutVotante: rutValidation.cleanRut,
+    formattedRutVotante: rutValidation.formattedRut,
+    rutEstudianteAsociado: studentRutClean,
+    formattedRutEstudiante: studentRutFormatted,
+    nombreCompleto: data.nombreCompleto.trim(),
+    estamento: data.estamento,
+    rbdEstablecimiento: data.rbdEstablecimiento.trim(),
+    nombreEstablecimiento: data.nombreEstablecimiento.trim(),
+    habilitado: true,
+    haVotado: false,
+    fechaVoto: null,
+    createdAt: new Date().toISOString(),
+  };
+
+  padronStore.unshift(newRecord);
+  return newRecord;
+}
+
+/**
+ * Habilita o inhabilita un votante en el padrón
+ */
+export function toggleVoterHabilitado(id: string): PadronRecord {
+  const index = padronStore.findIndex((r) => r.id === id);
+  if (index === -1) {
+    throw new Error('Registro del padrón no encontrado.');
+  }
+
+  padronStore[index].habilitado = !padronStore[index].habilitado;
+  return padronStore[index];
+}
+
+/**
+ * Elimina un registro del padrón
+ */
+export function deleteVoterRecord(id: string): boolean {
+  const index = padronStore.findIndex((r) => r.id === id);
+  if (index === -1) {
+    return false;
+  }
+
+  padronStore.splice(index, 1);
+  return true;
+}
+
+// ---------------------------------------------------------------------------
+// MOTOR DE INGESTA EXCEL ROBUSTO MULTI-HOJA CON DETECCIÓN DE TABLA Y POSICIONES
+// ---------------------------------------------------------------------------
+
+/**
+ * Ingesta Masiva desde Buffer de Excel (.xlsx / .xlsm)
+ */
+export function processPadronExcelBuffer(buffer: Buffer): ExcelProcessingResult {
+  const workbook = XLSX.read(buffer, { type: 'buffer' });
+
+  if (!workbook.SheetNames || workbook.SheetNames.length === 0) {
+    throw new Error('El archivo Excel no contiene hojas de datos.');
+  }
+
+  let totalFilasLeidas = 0;
+  let registrosInsertados = 0;
+  const erroresDetalle: Array<{ fila: number; rut?: string; motivo: string }> = [];
+
+  for (const sheetName of workbook.SheetNames) {
+    const worksheet = workbook.Sheets[sheetName];
+    if (!worksheet) continue;
+
+    const matrix = XLSX.utils.sheet_to_json<unknown[]>(worksheet, { header: 1, defval: '' });
+    if (!matrix || matrix.length === 0) continue;
+
+    const sheetNameUpper = sheetName.toUpperCase();
+    let defaultEstamento: EstamentoDecreto102 | null = null;
+    if (sheetNameUpper.includes('APODERADO') || sheetNameUpper.includes('PADRE') || sheetNameUpper.includes('FAMILIAR')) {
+      defaultEstamento = 'PADRES_APODERADOS';
+    } else if (sheetNameUpper.includes('ESTUDIANTE') || sheetNameUpper.includes('ALUMNO')) {
+      defaultEstamento = 'ESTUDIANTES';
+    } else if (sheetNameUpper.includes('DOCENTE') || sheetNameUpper.includes('PROFESOR')) {
+      defaultEstamento = 'DOCENTES';
+    } else if (sheetNameUpper.includes('ASISTENTE')) {
+      defaultEstamento = 'ASISTENTES';
+    } else if (sheetNameUpper.includes('DIRECTIV') || sheetNameUpper.includes('FUNCIONARIO')) {
+      defaultEstamento = 'DIRECTIVOS';
+    }
+
+    // Detección de Fila de Encabezados
+    let headerRowIndex = -1;
+    let colRutFamiliar = -1;
+    let colNombreFamiliar = -1;
+    let colApPaternoFamiliar = -1;
+    let colApMaternoFamiliar = -1;
+    let colNombreEstablecimiento = -1;
+    let colRbd = -1;
+
+    let colRutAlumno = -1;
+    let colNombreAlumno = -1;
+    let colApPaternoAlumno = -1;
+    let colApMaternoAlumno = -1;
+
+    let colRutGeneral = -1;
+    let colNombresGeneral = -1;
+    let colApellPaternoGeneral = -1;
+    let colApellMaternoGeneral = -1;
+    let colNombreCompletoGeneral = -1;
+    let colEstamentoGeneral = -1;
+
+    for (let r = 0; r < Math.min(25, matrix.length); r++) {
+      const row = matrix[r];
+      if (!Array.isArray(row)) continue;
+
+      row.forEach((cellVal, c) => {
+        const valStr = String(cellVal ?? '').trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+
+        if (valStr === 'rutfamiliar' || valStr === 'runfamiliar' || valStr === 'rutapoderado' || valStr === 'runapoderado') {
+          colRutFamiliar = c;
+        } else if (valStr === 'nombrefamiliar' || valStr === 'nombreapoderado') {
+          colNombreFamiliar = c;
+        } else if (valStr === 'appaternofamiliar' || valStr === 'appaternoapoderado') {
+          colApPaternoFamiliar = c;
+        } else if (valStr === 'apmaternofamiliar' || valStr === 'apmaternoapoderado') {
+          colApMaternoFamiliar = c;
+        } else if (valStr === 'nombreestablecimiento' || valStr === 'escuelaliceo' || valStr === 'establecimiento' || valStr === 'nombrecolegio') {
+          colNombreEstablecimiento = c;
+        } else if (valStr === 'rbd' || valStr === 'codrbd') {
+          colRbd = c;
+        } else if (valStr === 'rutalumno' || valStr === 'runalumno' || valStr === 'rutestudiante' || valStr === 'runestudiante') {
+          colRutAlumno = c;
+        } else if (valStr === 'nombrealumno' || valStr === 'nombreestudiante') {
+          colNombreAlumno = c;
+        } else if (valStr === 'appaternoalumno' || valStr === 'appaternoestudiante') {
+          colApPaternoAlumno = c;
+        } else if (valStr === 'apmaternoalumno' || valStr === 'apmaternoestudiante') {
+          colApMaternoAlumno = c;
+        } else if (valStr === 'run' || valStr === 'rut' || valStr === 'cedula' || valStr === 'identificacion') {
+          colRutGeneral = c;
+        } else if (valStr === 'nombres' || valStr === 'nombre') {
+          colNombresGeneral = c;
+        } else if (valStr === 'apellidopaterno' || valStr === 'paterno') {
+          colApellPaternoGeneral = c;
+        } else if (valStr === 'apellidomaterno' || valStr === 'materno') {
+          colApellMaternoGeneral = c;
+        } else if (valStr === 'nombrecompleto' || valStr === 'votante') {
+          colNombreCompletoGeneral = c;
+        } else if (valStr === 'estamento' || valStr === 'cargo' || valStr === 'tipo') {
+          colEstamentoGeneral = c;
+        }
+      });
+
+      if (
+        colRutFamiliar !== -1 ||
+        colRutAlumno !== -1 ||
+        (colRutGeneral !== -1 && (colNombreCompletoGeneral !== -1 || colNombresGeneral !== -1 || colEstamentoGeneral !== -1))
+      ) {
+        headerRowIndex = r;
+        break;
+      }
+    }
+
+    const startRow = headerRowIndex !== -1 ? headerRowIndex + 1 : 0;
+    totalFilasLeidas += (matrix.length - startRow);
+
+    for (let r = startRow; r < matrix.length; r++) {
+      const row = matrix[r];
+      if (!Array.isArray(row) || row.length === 0) continue;
+
+      const filaNum = r + 1;
+
+      // Extracción posicional estándar MINEDUC (Columnas A-S)
+      const posNombreFamiliar = String(row[0] ?? '').trim();
+      const posApPaternoFamiliar = String(row[1] ?? '').trim();
+      const posApMaternoFamiliar = String(row[2] ?? '').trim();
+      const posRutFamiliar = String(row[3] ?? '').trim();
+
+      const posNombreEstablecimiento = String(row[4] ?? '').trim();
+      const posRbd = String(row[5] ?? '').trim();
+
+      const posRutAlumno = String(row[15] ?? '').trim();
+      const posNombreAlumno = String(row[16] ?? '').trim();
+      const posApPaternoAlumno = String(row[17] ?? '').trim();
+      const posApMaternoAlumno = String(row[18] ?? '').trim();
+
+      const hdrRutFamiliar = colRutFamiliar !== -1 ? String(row[colRutFamiliar] ?? '').trim() : '';
+      const hdrRutAlumno = colRutAlumno !== -1 ? String(row[colRutAlumno] ?? '').trim() : '';
+      const hdrRutGeneral = colRutGeneral !== -1 ? String(row[colRutGeneral] ?? '').trim() : '';
+
+      const hdrNombreEstablecimiento = colNombreEstablecimiento !== -1 ? String(row[colNombreEstablecimiento] ?? '').trim() : '';
+      const hdrRbd = colRbd !== -1 ? String(row[colRbd] ?? '').trim() : '';
+
+      // ASIGNACIÓN ESTRICTA Y EXPLICITA DE HOJA
+      let isApoderadoSheet = false;
+      let isEstudianteSheet = false;
+
+      if (defaultEstamento === 'PADRES_APODERADOS') {
+        isApoderadoSheet = true;
+      } else if (defaultEstamento === 'ESTUDIANTES') {
+        isEstudianteSheet = true;
+      } else if (colRutFamiliar !== -1) {
+        isApoderadoSheet = true;
+      } else if (colRutAlumno !== -1) {
+        isEstudianteSheet = true;
+      }
+
+      let rawRutVotante = '';
+      let rawRutEstudiante: string | null = null;
+      let rawNombreCompleto = '';
+      let rawEstamento = '';
+      let rawRbd = '';
+      let rawNombreColegio = '';
+
+      if (isApoderadoSheet) {
+        rawEstamento = 'PADRES_APODERADOS';
+        rawRutVotante = hdrRutFamiliar || posRutFamiliar;
+        rawRutEstudiante = hdrRutAlumno || posRutAlumno;
+
+        if (colNombreFamiliar !== -1) {
+          const nom = String(row[colNombreFamiliar] ?? '').trim();
+          const pat = colApPaternoFamiliar !== -1 ? String(row[colApPaternoFamiliar] ?? '').trim() : '';
+          const mat = colApMaternoFamiliar !== -1 ? String(row[colApMaternoFamiliar] ?? '').trim() : '';
+          rawNombreCompleto = [nom, pat, mat].filter(Boolean).join(' ').trim();
+        } else {
+          rawNombreCompleto = [posNombreFamiliar, posApPaternoFamiliar, posApMaternoFamiliar].filter(Boolean).join(' ').trim();
+        }
+
+        rawNombreColegio = hdrNombreEstablecimiento || posNombreEstablecimiento || 'Establecimiento SLEP';
+        rawRbd = hdrRbd || posRbd || '10101';
+
+        // FILTRO DE DISCRIMINACIÓN: OMITIR SI NO HAY RUN DE APODERADO
+        const cleanRutDigits = rawRutVotante.replace(/[^0-9kK]/g, '');
+        if (
+          !rawRutVotante ||
+          !cleanRutDigits ||
+          cleanRutDigits === '0' ||
+          cleanRutDigits.length < 7 ||
+          rawRutVotante.toUpperCase().includes('SIN') ||
+          rawRutVotante.toUpperCase().includes('NO REGISTRA')
+        ) {
+          continue;
+        }
+
+      } else if (isEstudianteSheet) {
+        rawEstamento = 'ESTUDIANTES';
+        // En hoja de estudiantes, buscar el RUN del estudiante en todas las fuentes probables
+        rawRutVotante =
+          hdrRutAlumno ||
+          hdrRutGeneral ||
+          (posRutAlumno && posRutAlumno.length >= 7 ? posRutAlumno : '') ||
+          (posRutFamiliar && posRutFamiliar.length >= 7 ? posRutFamiliar : '') ||
+          String(row[0] ?? '').trim();
+        rawRutEstudiante = null;
+
+        if (colNombreAlumno !== -1) {
+          const nom = String(row[colNombreAlumno] ?? '').trim();
+          const pat = colApPaternoAlumno !== -1 ? String(row[colApPaternoAlumno] ?? '').trim() : '';
+          const mat = colApMaternoAlumno !== -1 ? String(row[colApMaternoAlumno] ?? '').trim() : '';
+          rawNombreCompleto = [nom, pat, mat].filter(Boolean).join(' ').trim();
+        } else if (colNombresGeneral !== -1) {
+          const nom = String(row[colNombresGeneral] ?? '').trim();
+          const pat = colApellPaternoGeneral !== -1 ? String(row[colApellPaternoGeneral] ?? '').trim() : '';
+          const mat = colApellMaternoGeneral !== -1 ? String(row[colApellMaternoGeneral] ?? '').trim() : '';
+          rawNombreCompleto = [nom, pat, mat].filter(Boolean).join(' ').trim();
+        } else if (posNombreAlumno || posApPaternoAlumno || posApMaternoAlumno) {
+          rawNombreCompleto = [posNombreAlumno, posApPaternoAlumno, posApMaternoAlumno].filter(Boolean).join(' ').trim();
+        } else if (posNombreFamiliar || posApPaternoFamiliar || posApMaternoFamiliar) {
+          rawNombreCompleto = [posNombreFamiliar, posApPaternoFamiliar, posApMaternoFamiliar].filter(Boolean).join(' ').trim();
+        } else {
+          rawNombreCompleto = [String(row[1] ?? ''), String(row[2] ?? ''), String(row[3] ?? '')].filter(Boolean).join(' ').trim();
+        }
+
+        rawNombreColegio = hdrNombreEstablecimiento || posNombreEstablecimiento || String(row[4] ?? '').trim() || 'Establecimiento SLEP';
+        rawRbd = hdrRbd || posRbd || String(row[5] ?? '').trim() || '10101';
+
+        // FILTRO DE DISCRIMINACIÓN DE ESTUDIANTES SIN RUN
+        const cleanRutDigits = rawRutVotante.replace(/[^0-9kK]/g, '');
+        if (!rawRutVotante || !cleanRutDigits || cleanRutDigits === '0' || cleanRutDigits.length < 7) {
+          continue;
+        }
+
+      } else {
+        // Hoja General de Funcionarios
+        rawRutVotante = hdrRutGeneral || String(row[0] ?? '').trim();
+        rawEstamento = colEstamentoGeneral !== -1 ? String(row[colEstamentoGeneral] ?? '').trim() : String(row[4] ?? '').trim();
+
+        if (colNombreCompletoGeneral !== -1 && String(row[colNombreCompletoGeneral] ?? '').trim()) {
+          rawNombreCompleto = String(row[colNombreCompletoGeneral] ?? '').trim();
+        } else if (colNombresGeneral !== -1) {
+          const nom = String(row[colNombresGeneral] ?? '').trim();
+          const pat = colApellPaternoGeneral !== -1 ? String(row[colApellPaternoGeneral] ?? '').trim() : '';
+          const mat = colApellMaternoGeneral !== -1 ? String(row[colApellMaternoGeneral] ?? '').trim() : '';
+          rawNombreCompleto = [nom, pat, mat].filter(Boolean).join(' ').trim();
+        } else {
+          rawNombreCompleto = [String(row[3] ?? ''), String(row[1] ?? ''), String(row[2] ?? '')].filter(Boolean).join(' ').trim();
+        }
+
+        rawNombreColegio = hdrNombreEstablecimiento || String(row[5] ?? '').trim() || 'Establecimiento SLEP';
+        rawRbd = hdrRbd || String(row[6] ?? '').trim() || '10101';
+      }
+
+      // Omitir filas vacías
+      if (!rawRutVotante && !rawNombreCompleto && !rawEstamento) {
+        continue;
+      }
+
+      // 1. Validar RUN Votante
+      const rutVal = cleanAndValidateRUT(rawRutVotante);
+      if (!rutVal.valid) {
+        erroresDetalle.push({
+          fila: filaNum,
+          rut: String(rawRutVotante || 'Desconocido'),
+          motivo: `[Hoja ${sheetName}] RUN de Votante inválido: ${rutVal.errorReason}`,
+        });
+        continue;
+      }
+
+      // 2. Validar Nombre
+      if (!rawNombreCompleto || rawNombreCompleto.trim().length < 2) {
+        erroresDetalle.push({
+          fila: filaNum,
+          rut: rutVal.formattedRut,
+          motivo: `[Hoja ${sheetName}] El nombre completo es requerido en el registro.`,
+        });
+        continue;
+      }
+
+      // 3. Validar Estamento Decreto 102
+      let estamentoEnum = normalizeEstamentoDecreto102(rawEstamento);
+      if (!estamentoEnum) {
+        estamentoEnum = defaultEstamento;
+      }
+
+      if (!estamentoEnum) {
+        erroresDetalle.push({
+          fila: filaNum,
+          rut: rutVal.formattedRut,
+          motivo: `[Hoja ${sheetName}] Estamento no reconocido ("${rawEstamento || 'Vacío'}"). Debe ser Estudiantes, Padres/Apoderados, Docentes, Asistentes o Directivos.`,
+        });
+        continue;
+      }
+
+      // 4. Validar Binomio Apoderado-Estudiante para PADRES_APODERADOS
+      let cleanStudentRut: string | null = null;
+      let formattedStudentRut: string | null = null;
+
+      if (estamentoEnum === 'PADRES_APODERADOS') {
+        const cleanStudentDigits = (rawRutEstudiante ?? '').replace(/[^0-9kK]/g, '');
+
+        if (!rawRutEstudiante || !cleanStudentDigits || cleanStudentDigits === '0' || cleanStudentDigits.length < 7) {
+          erroresDetalle.push({
+            fila: filaNum,
+            rut: rutVal.formattedRut,
+            motivo:
+              `[Hoja ${sheetName}] Regla Decreto 102: Para el apoderado "${rawNombreCompleto}" no se especificó un RUN válido de Estudiante (RUT_ALUMNO).`,
+          });
+          continue;
+        }
+
+        const studentRutVal = cleanAndValidateRUT(rawRutEstudiante);
+        if (!studentRutVal.valid) {
+          erroresDetalle.push({
+            fila: filaNum,
+            rut: rutVal.formattedRut,
+            motivo: `[Hoja ${sheetName}] RUN del Estudiante asociado inválido (${rawRutEstudiante}) para apoderado "${rawNombreCompleto}": ${studentRutVal.errorReason}`,
+          });
+          continue;
+        }
+
+        cleanStudentRut = studentRutVal.cleanRut;
+        formattedStudentRut = studentRutVal.formattedRut;
+      }
+
+      // 5. Prevenir Duplicados
+      const isDuplicate = padronStore.some((r) => {
+        if (r.estamento !== estamentoEnum) return false;
+        if (estamentoEnum === 'PADRES_APODERADOS') {
+          return r.rutVotante === rutVal.cleanRut && r.rutEstudianteAsociado === cleanStudentRut;
+        }
+        return r.rutVotante === rutVal.cleanRut;
+      });
+
+      if (isDuplicate) {
+        erroresDetalle.push({
+          fila: filaNum,
+          rut: rutVal.formattedRut,
+          motivo: `[Hoja ${sheetName}] Registro duplicado ya existente en el padrón para este estamento`,
+        });
+        continue;
+      }
+
+      // 6. Inserción en Lote
+      padronStore.push({
+        id: `padron-excel-${Date.now()}-${r}-${Math.random().toString(36).substring(2, 5)}`,
+        rutVotante: rutVal.cleanRut,
+        formattedRutVotante: rutVal.formattedRut,
+        rutEstudianteAsociado: cleanStudentRut,
+        formattedRutEstudiante: formattedStudentRut,
+        nombreCompleto: rawNombreCompleto.trim(),
+        estamento: estamentoEnum,
+        rbdEstablecimiento: (rawRbd || '10101').trim(),
+        nombreEstablecimiento: (rawNombreColegio || 'Establecimiento SLEP').trim(),
+        habilitado: true,
+        haVotado: false,
+        fechaVoto: null,
+        createdAt: new Date().toISOString(),
+      });
+
+      registrosInsertados++;
+    }
+  }
+
+  return {
+    success: true,
+    totalFilas: totalFilasLeidas,
+    registrosInsertados,
+    registrosRechazados: erroresDetalle.length,
+    quorums: calculateEstamentoQuorums(padronStore),
+    erroresDetalle,
+  };
+}
+
+export function resetPadronVotes() {
+  padronStore.forEach((record) => {
+    record.haVotado = false;
+    record.fechaVoto = null;
+  });
+}
