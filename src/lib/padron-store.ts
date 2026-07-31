@@ -162,6 +162,35 @@ export function getAvailableSchools(records: PadronRecord[] = padronStore): Scho
 }
 
 /**
+ * Obtiene la lista completa de todos los establecimientos reales únicos presentes en bd_padron (Supabase)
+ */
+export async function getAllSchoolsAsync(): Promise<SchoolFilterOption[]> {
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('bd_padron')
+      .select('rbd_establecimiento, nombre_establecimiento');
+
+    if (error || !data || data.length === 0) {
+      return getAvailableSchools(padronStore);
+    }
+
+    const map = new Map<string, string>();
+    data.forEach((item: Record<string, unknown>) => {
+      const rbd = String(item.rbd_establecimiento || '').trim();
+      const nombre = String(item.nombre_establecimiento || '').trim();
+      if (rbd && nombre) {
+        map.set(rbd, nombre);
+      }
+    });
+
+    return Array.from(map.entries()).map(([rbd, nombre]) => ({ rbd, nombre }));
+  } catch (err) {
+    console.error('[SUPABASE] Error obteniendo lista de establecimientos:', err);
+    return getAvailableSchools(padronStore);
+  }
+}
+
+/**
  * Obtiene el padrón completo con opciones de filtrado y búsqueda
  */
 export function getPadronRecords({
@@ -806,6 +835,7 @@ export async function getPadronRecordsAsync({
     const records = (data || []).map((item) => mapRowToPadronRecord(item as Record<string, unknown>));
     const total = count ?? records.length;
     const totalPages = Math.ceil(total / pageSize) || 1;
+    const allSchools = await getAllSchoolsAsync();
 
     return {
       records,
@@ -813,7 +843,7 @@ export async function getPadronRecordsAsync({
       totalPages,
       currentPage: page,
       quorums: calculateEstamentoQuorums(records),
-      schools: getAvailableSchools(records),
+      schools: allSchools,
     };
   } catch (err) {
     console.error('[SUPABASE] Excepción al consultar bd_padron:', err);

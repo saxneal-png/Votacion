@@ -1074,17 +1074,11 @@ az webapp config appsettings set --resource-group rg-slep-elecciones --name vota
                   }}
                 >
                   <option value="ALL">Todos los Establecimientos</option>
-                  {availableSchools.length > 0
-                    ? availableSchools.map((s) => (
-                        <option key={s.rbd} value={s.rbd}>
-                          {s.nombre} (RBD {s.rbd})
-                        </option>
-                      ))
-                    : metrics.schools.map((s) => (
-                        <option key={s.id} value={s.id}>
-                          {s.shortName}
-                        </option>
-                      ))}
+                  {availableSchools.map((s) => (
+                    <option key={s.rbd} value={s.rbd}>
+                      {s.nombre} (RBD {s.rbd})
+                    </option>
+                  ))}
                 </select>
               </div>
 
