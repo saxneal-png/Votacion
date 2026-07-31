@@ -7,6 +7,7 @@
  */
 
 import { formatRut } from '@/lib/rut-validator';
+import { supabase } from '@/lib/supabase';
 
 export interface VotingRecordEntry {
   folio: string;
@@ -94,6 +95,30 @@ export function recordOfficialVote(params: {
   };
 
   votingRecords.unshift(entry); // Nuevos registros primero
+
+  // Persistir en Supabase si las credenciales están configuradas
+  if (supabase) {
+    void supabase
+      .from('acta_sufragio')
+      .insert({
+        folio: entry.folio,
+        rut_votante: entry.rutVotante,
+        formatted_rut_votante: entry.formattedRutVotante,
+        email_registrado: entry.emailRegistrado,
+        estamento: entry.estamento,
+        rbd_establecimiento: entry.rbdEstablecimiento,
+        nombre_establecimiento: entry.nombreEstablecimiento,
+        fecha_hora: entry.fechaHora,
+      })
+      .then(({ error }) => {
+        if (error) {
+          console.error('[SUPABASE] Error al registrar acta de sufragio:', error.message);
+        } else {
+          console.log('[SUPABASE] Voto registrado correctamente en acta_sufragio.');
+        }
+      });
+  }
+
   return entry;
 }
 
