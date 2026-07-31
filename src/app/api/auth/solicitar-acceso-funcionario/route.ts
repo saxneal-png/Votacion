@@ -1,7 +1,7 @@
 import { type NextRequest, NextResponse } from 'next/server';
 
 import { sendOtpEmailViaGraph } from '@/lib/azure-m365-service';
-import { createTempToken, validateFuncionarioAuth } from '@/services/authRulesService';
+import { createTempToken, validateFuncionarioAuthAsync } from '@/services/authRulesService';
 
 export async function POST(request: NextRequest) {
   try {
@@ -14,7 +14,8 @@ export async function POST(request: NextRequest) {
     const emailDestino = body.emailDestino?.trim() || '';
 
     // 1. Validar reglas del Estamento Funcionarios y Docentes (Dominio @eduvallediguillin.gob.cl)
-    const matchedRecord = validateFuncionarioAuth(rutFuncionario, emailDestino);
+    const matchedRecord = await validateFuncionarioAuthAsync(rutFuncionario, emailDestino);
+
 
     // 2. Generar Token Temporal de Acceso (10 min)
     const tempToken = createTempToken({

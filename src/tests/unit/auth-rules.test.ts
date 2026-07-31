@@ -31,8 +31,9 @@ describe('Motor de Reglas de Autenticación, Multirrol y Sufragio Único (Decret
     it('rechaza cuando el RUN de estudiante no coincide con el apoderado', () => {
       expect(() => {
         validateApoderadoAuth('14567890-1', '99999999-9', 'apoderado@gmail.com');
-      }).toThrow('No se encontró una coincidencia válida');
+      }).toThrow('El RUN del apoderado no se encuentra registrado o no está vinculado');
     });
+
 
     it('aplica Sufragio Único Multihijo: bloquea si cualquier registro del apoderado ya sufragó', () => {
       // Simular que el apoderado ya sufragó por su primer hijo

@@ -1,5 +1,5 @@
 import { cleanAndValidateRUT } from '@/lib/rut-validator';
-import { EstamentoDecreto102, getPadronRecords, PadronRecord } from '@/lib/padron-store';
+import { EstamentoDecreto102, getPadronRecords, getPadronRecordsAsync, PadronRecord } from '@/lib/padron-store';
 import { getMockUserByRut } from '@/lib/mock-api';
 
 export interface TempTokenPayload {
@@ -42,7 +42,8 @@ function cleanRut(rut: string): string {
 /**
  * REGLA A: Estamento PADRES Y APODERADOS
  * - Requiere RUN Apoderado + RUN Estudiante + Correo Personal.
- * - Verifica par exacto (rut_votante, rut_estudiante_asociado).
+ * - Verifica par exacto registrado (rut_votante, rut_estudiante_asociado).
+ * - Exige que el RUN del apoderado esté vinculado a un estudiante en el padrón electoral.
  * - Sufragio Único Multihijo: Si CUALQUIERA de los registros de ese RUN Apoderado bajo PADRES_APODERADOS
  *   ya tiene ha_votado === true, RECHAZA la autenticación inmediatamente.
  */
@@ -71,8 +72,8 @@ export function validateApoderadoAuth(
 
   const records = getPadronRecords().records;
 
-  // 1. Buscar coincidencia exacta del par (Apoderado, Estudiante)
-  let exactMatch = records.find(
+  // 1. Buscar coincidencia exacta del par (Apoderado, Estudiante) en el padrón
+  const exactMatch = records.find(
     (r) =>
       r.estamento === 'PADRES_APODERADOS' &&
       cleanRut(r.rutVotante) === cleanApoderadoRut &&
@@ -80,35 +81,10 @@ export function validateApoderadoAuth(
       cleanRut(r.rutEstudianteAsociado) === cleanEstudianteRut,
   );
 
-  // Si existe este apoderado en el padrón pero con otro estudiante distinto, rechazar
-  const apoderadoRecordInPadron = records.find(
-    (r) => r.estamento === 'PADRES_APODERADOS' && cleanRut(r.rutVotante) === cleanApoderadoRut,
-  );
-
-  if (!exactMatch && apoderadoRecordInPadron) {
-    throw new Error(
-      'No se encontró una coincidencia válida para el RUN de Apoderado y RUN de Estudiante ingresados en el padrón.',
-    );
-  }
-
   if (!exactMatch) {
-    // Autocrear registro para RUTs nuevos de demostración no registrados previamente
-    exactMatch = {
-      id: `padron-auto-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-      rutVotante: cleanApoderadoRut,
-      formattedRutVotante: valApoderado.formattedRut || rutApoderado,
-      rutEstudianteAsociado: cleanEstudianteRut,
-      formattedRutEstudiante: valEstudiante.formattedRut || rutEstudiante,
-      nombreCompleto: 'Votante Apoderado Acreditado',
-      estamento: 'PADRES_APODERADOS',
-      rbdEstablecimiento: '10202',
-      nombreEstablecimiento: 'Escuela Martín Prado',
-      habilitado: true,
-      haVotado: false,
-      fechaVoto: null,
-      createdAt: new Date().toISOString(),
-    };
-    records.push(exactMatch);
+    throw new Error(
+      'El RUN del apoderado no se encuentra registrado o no está vinculado con el RUN del estudiante ingresado en el padrón electoral.',
+    );
   }
 
   // 2. Control de Sufragio Único por Apoderado (Multihijo):
@@ -128,10 +104,20 @@ export function validateApoderadoAuth(
   return exactMatch;
 }
 
+export async function validateApoderadoAuthAsync(
+  rutApoderado: string,
+  rutEstudiante: string,
+  email: string,
+): Promise<PadronRecord> {
+  await getPadronRecordsAsync();
+  return validateApoderadoAuth(rutApoderado, rutEstudiante, email);
+}
+
 /**
  * REGLA B: Estamento FUNCIONARIOS Y DOCENTES DEL SLEP
- * - Requiere RUN Funcionario + Correo Institucional/Personal.
+ * - Requiere RUN Funcionario + Correo Institucional.
  * - Validación de Dominio Restrictivo (@eduvallediguillin.gob.cl).
+ * - Exige estar registrado en el padrón en un estamento de funcionario (DOCENTES, ASISTENTES, DIRECTIVOS).
  * - Verifica ha_votado === false para ese estamento específico.
  */
 export function validateFuncionarioAuth(rutFuncionario: string, email: string): PadronRecord {
@@ -168,31 +154,11 @@ export function validateFuncionarioAuth(rutFuncionario: string, email: string): 
   );
 
   if (!funcionarioRecord) {
-    // Autocrear registro de funcionario en el padrón para permitir acreditar cualquier RUT ingresado
-    funcionarioRecord = {
-      id: `padron-func-auto-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-      rutVotante: cleanRutStr,
-      formattedRutVotante: valFuncionario.formattedRut || rutFuncionario,
-      rutEstudianteAsociado: null,
-      formattedRutEstudiante: null,
-      nombreCompleto: 'Funcionario SLEP Acreditado',
-      estamento: 'DOCENTES',
-      rbdEstablecimiento: '10202',
-      nombreEstablecimiento: 'Escuela Martín Prado',
-      habilitado: true,
-      haVotado: false,
-      fechaVoto: null,
-      createdAt: new Date().toISOString(),
-    };
-    records.push(funcionarioRecord);
-  }
-
-  if (!funcionarioRecord) {
-    // Buscar en mock-api fallback (ej: 16940271-k, 12345678-5, 19876543-0)
+    // Buscar en usuarios conocidos de prueba (mockUsers)
     const mockUser = getMockUserByRut(valFuncionario.formattedRut);
-    if (mockUser) {
-      return {
-        id: `func-mock-${Date.now()}`,
+    if (mockUser && ['docentes', 'asistentes', 'directivos'].includes(mockUser.estamento.toLowerCase())) {
+      funcionarioRecord = {
+        id: `func-mock-${mockUser.rut}`,
         rutVotante: mockUser.rut,
         formattedRutVotante: mockUser.rut,
         rutEstudianteAsociado: null,
@@ -200,16 +166,18 @@ export function validateFuncionarioAuth(rutFuncionario: string, email: string): 
         nombreCompleto: mockUser.fullName,
         estamento: mockUser.estamento.toUpperCase() as EstamentoDecreto102,
         rbdEstablecimiento: '10202',
-        nombreEstablecimiento: 'Escuela Martín Prado',
+        nombreEstablecimiento: mockUser.organization || 'Establecimiento SLEP',
         habilitado: true,
         haVotado: false,
         fechaVoto: null,
         createdAt: new Date().toISOString(),
       };
     }
+  }
 
+  if (!funcionarioRecord) {
     throw new Error(
-      'No encontramos un registro de funcionario o docente activo que coincida con el RUN ingresado en el padrón.',
+      'El RUN ingresado no se encuentra registrado como funcionario ni asociado a un establecimiento educacional en el padrón electoral.',
     );
   }
 
@@ -223,6 +191,15 @@ export function validateFuncionarioAuth(rutFuncionario: string, email: string): 
 
   return funcionarioRecord;
 }
+
+export async function validateFuncionarioAuthAsync(
+  rutFuncionario: string,
+  email: string,
+): Promise<PadronRecord> {
+  await getPadronRecordsAsync();
+  return validateFuncionarioAuth(rutFuncionario, email);
+}
+
 
 /**
  * REGLA C: MARCAR VOTO EMITIDO EN EL PADRÓN (SUFRAGIO ÚNICO & MULTIRROL)

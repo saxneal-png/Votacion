@@ -4,8 +4,8 @@ import { sendOtpEmailViaGraph } from '@/lib/azure-m365-service';
 import { createSession, SESSION_COOKIE_NAME } from '@/lib/server-session';
 import {
   createTempToken,
-  validateApoderadoAuth,
-  validateFuncionarioAuth,
+  validateApoderadoAuthAsync,
+  validateFuncionarioAuthAsync,
 } from '@/services/authRulesService';
 
 export async function POST(request: Request) {
@@ -39,12 +39,13 @@ export async function POST(request: Request) {
           { status: 400 },
         );
       }
-      matchedRecord = validateApoderadoAuth(rut, studentRut, email);
+      matchedRecord = await validateApoderadoAuthAsync(rut, studentRut, email);
       estamentoLabel = 'PADRES Y APODERADOS';
     } else {
-      matchedRecord = validateFuncionarioAuth(rut, email);
+      matchedRecord = await validateFuncionarioAuthAsync(rut, email);
       estamentoLabel = matchedRecord.estamento;
     }
+
 
     const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
 
