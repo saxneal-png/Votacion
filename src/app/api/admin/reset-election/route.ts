@@ -5,7 +5,7 @@ import { resetMetrics } from '@/lib/metrics-store';
 import { resetPadronVotesAsync } from '@/lib/padron-store';
 import { clearVotedUsers } from '@/lib/server-session';
 import { resetVotingRecords } from '@/lib/voting-record-store';
-import { supabaseAdmin } from '@/lib/supabase';
+import { supabaseAdmin } from '@/lib/supabase-client';
 
 export async function POST(request: NextRequest) {
   try {

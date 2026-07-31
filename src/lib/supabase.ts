@@ -9,8 +9,7 @@ const FALLBACK_SERVICE_KEY =
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || FALLBACK_SUPABASE_URL;
 
-// En el servidor (rutas API de Next.js) se prefiere la clave service_role para saltarse RLS.
-// En el cliente browser se usa la clave anon pública.
+// En el servidor se prefiere la clave service_role para saltarse RLS.
 const supabaseKey =
   process.env.SUPABASE_SERVICE_ROLE_KEY ||
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
@@ -34,3 +33,5 @@ export const supabase = isSupabaseConfigured
       auth: { persistSession: false },
     })
   : null;
+
+export const supabaseAdmin = supabase;
