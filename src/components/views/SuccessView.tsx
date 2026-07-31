@@ -120,7 +120,7 @@ export function SuccessView({ voterName, candidateName, receiptCode, receiptIssu
           type="button"
           onClick={onRestart}
         >
-          {isDemoMode ? 'Reiniciar simulacion' : 'Reiniciar demo'}
+          🗳️ Volver al Inicio
         </button>
       </div>
     </section>

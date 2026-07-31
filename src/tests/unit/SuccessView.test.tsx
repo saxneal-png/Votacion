@@ -37,7 +37,7 @@ describe('SuccessView', () => {
   it('llama a onRestart al pulsar el botón de reinicio', async () => {
     const onRestart = vi.fn();
     renderSuccess({ onRestart });
-    await userEvent.click(screen.getByRole('button', { name: /reiniciar/i }));
+    await userEvent.click(screen.getByRole('button', { name: /volver al inicio/i }));
     expect(onRestart).toHaveBeenCalledOnce();
   });
 

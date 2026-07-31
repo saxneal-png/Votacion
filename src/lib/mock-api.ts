@@ -1,3 +1,4 @@
+import { getPadronRecords } from '@/lib/padron-store';
 import type { Candidate, Estamento, User } from '@/types';
 
 interface MockUserRecord extends User {
@@ -197,6 +198,28 @@ export function getMockUserByRut(rut: string): MockUserRecord | null {
   const normalizedRut = normalizeRut(rut);
   const found = VALID_USERS.find((user) => normalizeRut(user.rut) === normalizedRut);
   if (found) return found;
+
+  const cleanRutStr = rut.replace(/[^0-9kK]/g, '').toUpperCase();
+  const padronRecord = getPadronRecords().records.find(
+    (r) => r.rutVotante.replace(/[^0-9kK]/g, '').toUpperCase() === cleanRutStr,
+  );
+
+  if (padronRecord) {
+    const estamentoLower = (
+      padronRecord.estamento === 'PADRES_APODERADOS' ? 'apoderados' : padronRecord.estamento.toLowerCase()
+    ) as Estamento;
+
+    return {
+      rut: padronRecord.formattedRutVotante || rut,
+      email: 'votante@slepvallediguillin.gob.cl',
+      otp: '111111',
+      fullName: padronRecord.nombreCompleto,
+      organization: padronRecord.nombreEstablecimiento || 'SLEP VALLE DIGUILLÍN',
+      estamento: estamentoLower,
+      schoolId: padronRecord.rbdEstablecimiento || 'martin-prado',
+      studentRut: padronRecord.formattedRutEstudiante || undefined,
+    };
+  }
 
   return {
     rut: normalizedRut || '16940271-K',
