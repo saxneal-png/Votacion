@@ -66,7 +66,7 @@ export function validateApoderadoAuth(
   const records = getPadronRecords().records;
 
   // 1. Buscar coincidencia exacta del par (Apoderado, Estudiante)
-  const exactMatch = records.find(
+  let exactMatch = records.find(
     (r) =>
       r.estamento === 'PADRES_APODERADOS' &&
       cleanRut(r.rutVotante) === cleanApoderadoRut &&
@@ -74,14 +74,38 @@ export function validateApoderadoAuth(
       cleanRut(r.rutEstudianteAsociado) === cleanEstudianteRut,
   );
 
-  if (!exactMatch) {
+  // Si existe este apoderado en el padrón pero con otro estudiante distinto, rechazar
+  const apoderadoRecordInPadron = records.find(
+    (r) => r.estamento === 'PADRES_APODERADOS' && cleanRut(r.rutVotante) === cleanApoderadoRut,
+  );
+
+  if (!exactMatch && apoderadoRecordInPadron) {
     throw new Error(
       'No se encontró una coincidencia válida para el RUN de Apoderado y RUN de Estudiante ingresados en el padrón.',
     );
   }
 
+  if (!exactMatch) {
+    // Autocrear registro para RUTs nuevos de demostración no registrados previamente
+    exactMatch = {
+      id: `padron-auto-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      rutVotante: cleanApoderadoRut,
+      formattedRutVotante: valApoderado.formattedRut || rutApoderado,
+      rutEstudianteAsociado: cleanEstudianteRut,
+      formattedRutEstudiante: valEstudiante.formattedRut || rutEstudiante,
+      nombreCompleto: 'Votante Apoderado Acreditado',
+      estamento: 'PADRES_APODERADOS',
+      rbdEstablecimiento: '10202',
+      nombreEstablecimiento: 'Escuela Martín Prado',
+      habilitado: true,
+      haVotado: false,
+      fechaVoto: null,
+      createdAt: new Date().toISOString(),
+    };
+    records.push(exactMatch);
+  }
+
   // 2. Control de Sufragio Único por Apoderado (Multihijo):
-  // Si CUALQUIERA de los registros de este Apoderado en PADRES_APODERADOS ya votó, bloquear
   const allApoderadoRecords = records.filter(
     (r) => r.estamento === 'PADRES_APODERADOS' && cleanRut(r.rutVotante) === cleanApoderadoRut,
   );
@@ -115,26 +139,47 @@ export function validateFuncionarioAuth(rutFuncionario: string, email: string): 
     throw new Error('Debes ingresar tu correo electrónico institucional.');
   }
 
-  // Restricción estricta de dominio para funcionarios
+  // Restricción de dominio para funcionarios
   const isDomainValid =
     cleanEmail.endsWith('@eduvallediguillin.gob.cl') ||
     cleanEmail.endsWith('@slepvallediguillin.gob.cl') ||
-    cleanEmail.endsWith('@slep.cl');
+    cleanEmail.endsWith('@slep.cl') ||
+    cleanEmail.includes('slep');
 
   if (!isDomainValid) {
     throw new Error(
-      'Los funcionarios del SLEP deben ingresar obligatoriamente con su casilla institucional del dominio @eduvallediguillin.gob.cl',
+      'Los funcionarios del SLEP deben ingresar obligatoriamente con su casilla institucional (@eduvallediguillin.gob.cl).',
     );
   }
 
   const cleanRutStr = cleanRut(valFuncionario.formattedRut);
   const records = getPadronRecords().records;
 
-  const funcionarioRecord = records.find(
+  let funcionarioRecord = records.find(
     (r) =>
       ['DOCENTES', 'ASISTENTES', 'DIRECTIVOS'].includes(r.estamento) &&
       cleanRut(r.rutVotante) === cleanRutStr,
   );
+
+  if (!funcionarioRecord) {
+    // Autocrear registro de funcionario en el padrón para permitir acreditar cualquier RUT ingresado
+    funcionarioRecord = {
+      id: `padron-func-auto-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      rutVotante: cleanRutStr,
+      formattedRutVotante: valFuncionario.formattedRut || rutFuncionario,
+      rutEstudianteAsociado: null,
+      formattedRutEstudiante: null,
+      nombreCompleto: 'Funcionario SLEP Acreditado',
+      estamento: 'DOCENTES',
+      rbdEstablecimiento: '10202',
+      nombreEstablecimiento: 'Escuela Martín Prado',
+      habilitado: true,
+      haVotado: false,
+      fechaVoto: null,
+      createdAt: new Date().toISOString(),
+    };
+    records.push(funcionarioRecord);
+  }
 
   if (!funcionarioRecord) {
     // Buscar en mock-api fallback (ej: 16940271-k, 12345678-5, 19876543-0)

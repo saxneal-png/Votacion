@@ -81,8 +81,8 @@ const INITIAL_MOCK_PADRON: PadronRecord[] = [
     rbdEstablecimiento: '10202',
     nombreEstablecimiento: 'Escuela Martín Prado',
     habilitado: true,
-    haVotado: true,
-    fechaVoto: new Date(Date.now() - 3600000).toISOString(),
+    haVotado: false,
+    fechaVoto: null,
     createdAt: new Date().toISOString(),
   },
   {
@@ -111,8 +111,8 @@ const INITIAL_MOCK_PADRON: PadronRecord[] = [
     rbdEstablecimiento: '10202',
     nombreEstablecimiento: 'Escuela Martín Prado',
     habilitado: true,
-    haVotado: true,
-    fechaVoto: new Date(Date.now() - 7200000).toISOString(),
+    haVotado: false,
+    fechaVoto: null,
     createdAt: new Date().toISOString(),
   },
   {
