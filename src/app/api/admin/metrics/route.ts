@@ -4,7 +4,7 @@ import { type NextRequest, NextResponse } from 'next/server';
 import { getCandidatosAsync, getEstamentoVariants } from '@/lib/candidates-store';
 import { getPadronRecordsAsync } from '@/lib/padron-store';
 import { getVotingRecordsAsync } from '@/lib/voting-record-store';
-import { getSchoolsVoted, getVoteTallies } from '@/lib/metrics-store';
+import { getSchoolsVoted, getVoteTalliesAsync } from '@/lib/metrics-store';
 import { SCHOOLS } from '@/lib/schools-data';
 import {
   ADMIN_SESSION_COOKIE,
@@ -44,9 +44,10 @@ export async function GET(request: NextRequest) {
   const allCandidates = await getCandidatosAsync({ estamento: 'ALL' });
 
   // 2. Obtener padrón oficial de votantes (Supabase / Store con filtro Multi-Tenant)
-  const { records: padronRecords } = await getPadronRecordsAsync({
+  const { records: padronRecords, total: totalPadronCount } = await getPadronRecordsAsync({
     rbd: schoolId,
     slepId,
+    pageSize: 100000,
   });
 
   // 3. Obtener actas oficiales de voto (Supabase / Store)
@@ -56,7 +57,7 @@ export async function GET(request: NextRequest) {
     return true;
   });
 
-  const tallies = getVoteTallies(slepId, schoolId);
+  const tallies = await getVoteTalliesAsync(slepId, schoolId);
   const schoolsVotedMap = getSchoolsVoted(slepId);
 
   // ── Padrón totals por estamento ──────────────────────────────────────────
@@ -70,7 +71,7 @@ export async function GET(request: NextRequest) {
   };
 
   if (padronRecords.length > 0) {
-    padron.total = padronRecords.length;
+    padron.total = totalPadronCount || padronRecords.length;
     padronRecords.forEach((p) => {
       const vars = getEstamentoVariants(p.estamento).map((v) => v.toLowerCase());
       if (vars.includes('directivos')) padron.directivos++;

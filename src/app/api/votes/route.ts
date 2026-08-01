@@ -124,6 +124,7 @@ export async function POST(request: Request) {
       estamento: userEstamento.toUpperCase(),
       rbdEstablecimiento: userRbd,
       nombreEstablecimiento: userOrganization,
+      skipSupabaseInsert: true,
     });
 
     const result = await submitVote(candidateId);

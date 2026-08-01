@@ -9,6 +9,7 @@
  */
 
 import type { Estamento } from '@/types';
+import { supabaseAdmin } from '@/lib/supabase-client';
 
 declare global {
   // eslint-disable-next-line no-var
@@ -47,6 +48,40 @@ export function recordVote(
 
 export function getVoteTallies(_slepId?: string, _schoolId?: string): ReadonlyMap<string, number> {
   return voteTallies;
+}
+
+/**
+ * Obtiene el escrutinio actualizado de votos por candidato consultando la tabla `votos_anonimos` en Supabase
+ */
+export async function getVoteTalliesAsync(_slepId?: string, _schoolId?: string): Promise<Map<string, number>> {
+  const map = new Map<string, number>(voteTallies);
+
+  if (!supabaseAdmin) {
+    return map;
+  }
+
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('votos_anonimos')
+      .select('candidate_id');
+
+    if (error || !data) {
+      console.error('[SUPABASE] Error obteniendo escrutinio de votos:', error?.message);
+      return map;
+    }
+
+    data.forEach((row: { candidate_id: string }) => {
+      const cid = String(row.candidate_id ?? '').trim();
+      if (cid) {
+        map.set(cid, (map.get(cid) ?? 0) + 1);
+      }
+    });
+
+    return map;
+  } catch (err) {
+    console.error('[SUPABASE] Excepción obteniendo escrutinio de votos:', err);
+    return map;
+  }
 }
 
 export function getSchoolsVoted(_slepId?: string): ReadonlyMap<string, ReadonlySet<Estamento>> {

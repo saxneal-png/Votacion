@@ -67,6 +67,7 @@ export function recordOfficialVote(params: {
   estamento: string;
   rbdEstablecimiento?: string;
   nombreEstablecimiento?: string;
+  skipSupabaseInsert?: boolean;
 }): VotingRecordEntry {
   const count = votingRecords.length + 1;
   const folioNum = String(count).padStart(5, '0');
@@ -90,8 +91,8 @@ export function recordOfficialVote(params: {
 
   votingRecords.unshift(entry); // Nuevos registros primero
 
-  // Persistir en Supabase si las credenciales están configuradas
-  if (supabase) {
+  // Persistir en Supabase solo si no se insertó previamente vía RPC
+  if (supabase && !params.skipSupabaseInsert) {
     void supabase
       .from('acta_sufragio')
       .insert({
@@ -224,17 +225,29 @@ export async function getVotingRecordsAsync({
       return { records: [], total: 0 };
     }
 
-    const records: VotingRecordEntry[] = allRows.map((item) => ({
-      folio: item.folio,
-      rutVotante: item.rut_votante,
-      formattedRutVotante: item.formatted_rut_votante || item.rut_votante,
-      emailRegistrado: item.email_registrado,
-      fechaHora: item.fecha_hora,
-      fechaHoraFormateada: formatChileDateTime(item.fecha_hora),
-      estamento: item.estamento,
-      rbdEstablecimiento: item.rbd_establecimiento,
-      nombreEstablecimiento: item.nombre_establecimiento,
-    }));
+    const seen = new Set<string>();
+    const records: VotingRecordEntry[] = [];
+
+    for (const item of allRows) {
+      const cleanRutStr = String(item.rut_votante ?? '').replace(/[^0-9kK]/g, '').toUpperCase();
+      const estStr = String(item.estamento ?? '').toUpperCase().trim();
+      const key = `${cleanRutStr}_${estStr}`;
+
+      if (!seen.has(key)) {
+        seen.add(key);
+        records.push({
+          folio: item.folio,
+          rutVotante: item.rut_votante,
+          formattedRutVotante: item.formatted_rut_votante || item.rut_votante,
+          emailRegistrado: item.email_registrado,
+          fechaHora: item.fecha_hora,
+          fechaHoraFormateada: formatChileDateTime(item.fecha_hora),
+          estamento: item.estamento,
+          rbdEstablecimiento: item.rbd_establecimiento,
+          nombreEstablecimiento: item.nombre_establecimiento,
+        });
+      }
+    }
 
     return { records, total: records.length };
   } catch (err) {
