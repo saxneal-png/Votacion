@@ -8,6 +8,7 @@
 
 import { formatRut } from '@/lib/rut-validator';
 import { supabase } from '@/lib/supabase';
+import { formatChileDateTime } from '@/lib/chile-time';
 
 export interface VotingRecordEntry {
   folio: string;
@@ -38,7 +39,7 @@ if (votingRecords.length === 0) {
       formattedRutVotante: '16.940.271-K',
       emailRegistrado: 'maria.gonzalez@eduvallediguillin.gob.cl',
       fechaHora: new Date(Date.now() - 3600000).toISOString(),
-      fechaHoraFormateada: new Date(Date.now() - 3600000).toLocaleString('es-CL'),
+      fechaHoraFormateada: formatChileDateTime(Date.now() - 3600000),
       estamento: 'DOCENTES',
       rbdEstablecimiento: '10202',
       nombreEstablecimiento: 'Escuela Martín Prado',
@@ -49,7 +50,7 @@ if (votingRecords.length === 0) {
       formattedRutVotante: '14.567.890-1',
       emailRegistrado: 'apoderado.prueba@gmail.com',
       fechaHora: new Date(Date.now() - 1800000).toISOString(),
-      fechaHoraFormateada: new Date(Date.now() - 1800000).toLocaleString('es-CL'),
+      fechaHoraFormateada: formatChileDateTime(Date.now() - 1800000),
       estamento: 'PADRES_APODERADOS',
       rbdEstablecimiento: '10202',
       nombreEstablecimiento: 'Escuela Martín Prado',
@@ -81,14 +82,7 @@ export function recordOfficialVote(params: {
     formattedRutVotante: formattedRut,
     emailRegistrado: params.emailRegistrado.trim().toLowerCase(),
     fechaHora: now.toISOString(),
-    fechaHoraFormateada: now.toLocaleString('es-CL', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-    }),
+    fechaHoraFormateada: formatChileDateTime(now),
     estamento: params.estamento.toUpperCase(),
     rbdEstablecimiento: params.rbdEstablecimiento || '10201',
     nombreEstablecimiento: params.nombreEstablecimiento || 'Establecimiento SLEP',
@@ -236,7 +230,7 @@ export async function getVotingRecordsAsync({
       formattedRutVotante: item.formatted_rut_votante || item.rut_votante,
       emailRegistrado: item.email_registrado,
       fechaHora: item.fecha_hora,
-      fechaHoraFormateada: new Date(item.fecha_hora).toLocaleString('es-CL'),
+      fechaHoraFormateada: formatChileDateTime(item.fecha_hora),
       estamento: item.estamento,
       rbdEstablecimiento: item.rbd_establecimiento,
       nombreEstablecimiento: item.nombre_establecimiento,

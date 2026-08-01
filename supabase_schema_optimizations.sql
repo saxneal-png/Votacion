@@ -135,9 +135,9 @@ BEGIN
     RAISE EXCEPTION 'El elector ya ha emitido su voto en esta elección.';
   END IF;
 
-  -- Generar Folio y Código de Comprobante Único
+  -- Generar Folio y Código de Comprobante Único (Hora Oficial Chile Continental America/Santiago)
   v_receipt_code := 'SLEP-' || UPPER(SUBSTRING(MD5(RANDOM()::TEXT) FROM 1 FOR 8));
-  v_folio := 'FOLIO-' || TO_CHAR(v_now, 'YYYYMMDD-HH24MISS') || '-' || UPPER(SUBSTRING(MD5(RANDOM()::TEXT) FROM 1 FOR 4));
+  v_folio := 'FOLIO-' || TO_CHAR(v_now AT TIME ZONE 'America/Santiago', 'YYYYMMDD-HH24MISS') || '-' || UPPER(SUBSTRING(MD5(RANDOM()::TEXT) FROM 1 FOR 4));
 
   -- 2. Marcar al votante como "ha votado"
   UPDATE bd_padron

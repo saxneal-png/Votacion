@@ -6,6 +6,7 @@ import type { EstamentoDecreto102, ExcelProcessingResult, PadronRecord, QuorumEs
 import type { ConnectionTestResult } from '@/lib/azure-m365-service';
 import { cleanAndValidateRUT } from '@/lib/rut-validator';
 import type { VotingRecordEntry } from '@/lib/voting-record-store';
+import { formatChileDateTime } from '@/lib/chile-time';
 
 interface AdminViewProps {
   metrics: AdminMetrics;
@@ -1608,7 +1609,7 @@ az webapp config appsettings set --resource-group rg-slep-elecciones --name vota
               ) : (
                 auditLog.map((log, i) => (
                   <div key={i} className="p-3 flex items-center justify-between hover:bg-slate-50">
-                    <span className="text-slate-500">{new Date(log.ts).toLocaleString('es-CL')}</span>
+                    <span className="text-slate-500">{formatChileDateTime(log.ts)}</span>
                     <span className="font-bold text-slate-800">{log.event}</span>
                     <span className="text-slate-600">{log.ip}</span>
                     <span className="text-slate-500 max-w-xs truncate">{log.detail || '—'}</span>
