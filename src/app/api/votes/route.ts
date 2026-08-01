@@ -5,6 +5,7 @@ import { getCandidateById, submitVote } from '@/lib/mock-api';
 import { getEstamentoVariants } from '@/lib/candidates-store';
 import { recordVote } from '@/lib/metrics-store';
 import { recordOfficialVote } from '@/lib/voting-record-store';
+import { recordVoteInSupabase } from '@/lib/supabase-client';
 import {
   destroySession,
   getSession,
@@ -76,17 +77,47 @@ export async function POST(request: Request) {
       );
     }
 
-    // Atomic check + mark: no await between these two calls.
+    // Atomic check + mark local session:
     if (hasUserVoted(userRut)) {
       return NextResponse.json(
         { message: 'Ya has emitido tu voto en esta eleccion.' },
         { status: 409 },
       );
     }
+
+    // Ejecutar Transacción Atómica RPC en Supabase
+    let voteResult;
+    try {
+      voteResult = await recordVoteInSupabase({
+        estamento: userEstamento,
+        candidateId,
+        rut: userRut,
+        rbd: userRbd,
+        nombreEstablecimiento: userOrganization,
+        email: userEmail,
+      });
+    } catch (supabaseError) {
+      const code = (supabaseError as Record<string, unknown>)?.code;
+      if (code === 'ALREADY_VOTED') {
+        markUserAsVoted(userRut);
+        return NextResponse.json(
+          { message: 'Ya has emitido tu voto en esta eleccion.' },
+          { status: 409 },
+        );
+      }
+      if (code === 'VOTANTE_INHABILITADO') {
+        return NextResponse.json(
+          { message: 'El votante se encuentra inhabilitado para participar.' },
+          { status: 403 },
+        );
+      }
+      throw supabaseError;
+    }
+
     markUserAsVoted(userRut);
     recordVote(candidateId, userEstamento, userRbd);
 
-    // Registrar en el acta oficial con el email y datos reales del votante
+    // Registrar en el acta oficial local con el email y datos reales del votante
     recordOfficialVote({
       rutVotante: userRut,
       emailRegistrado: userEmail,
@@ -101,6 +132,8 @@ export async function POST(request: Request) {
     destroySession(sessionId);
     const response = NextResponse.json({
       ...result,
+      receiptCode: voteResult.receiptCode || voteResult.comprobanteId,
+      folio: voteResult.folio || voteResult.comprobanteId,
       voterName: userFullName,
     });
     response.cookies.set({

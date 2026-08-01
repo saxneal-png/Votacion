@@ -1,13 +1,19 @@
 export type Estamento = 'directivos' | 'docentes' | 'asistentes' | 'apoderados' | 'estudiantes';
 
-export interface User {
+export interface TenantContext {
+  slepId?: string;
+  schoolId?: string;
+  rbd?: string;
+}
+
+export interface User extends TenantContext {
   fullName: string;
   organization: string;
   estamento: Estamento;
   studentRut?: string;
 }
 
-export interface Candidate {
+export interface Candidate extends TenantContext {
   id: string;
   name: string;
   role: string;
@@ -51,11 +57,13 @@ export interface SchoolResult {
   id: string;
   name: string;
   shortName: string;
+  slepId?: string;
+  rbd?: string;
   padron: { directivos: number; docentes: number; asistentes: number; apoderados?: number; estudiantes?: number };
   voted: { directivos: boolean; docentes: boolean; asistentes: boolean; apoderados?: boolean; estudiantes?: boolean };
 }
 
-export interface AdminMetrics {
+export interface AdminMetrics extends TenantContext {
   lastUpdated: number;
   padron: { total: number; directivos: number; docentes: number; asistentes: number; apoderados?: number; estudiantes?: number };
   votes: { total: number; directivos: number; docentes: number; asistentes: number; apoderados?: number; estudiantes?: number };

@@ -36,17 +36,28 @@ export async function GET(request: NextRequest) {
 
   addAuditEntry({ ts: Date.now(), ip, event: 'access' });
 
+  const url = new URL(request.url);
+  const slepId = url.searchParams.get('slep_id') || url.searchParams.get('slepId') || 'ALL';
+  const schoolId = url.searchParams.get('school_id') || url.searchParams.get('rbd') || 'ALL';
+
   // 1. Obtener candidatos actualizados (Supabase / Store)
   const allCandidates = await getCandidatosAsync({ estamento: 'ALL' });
 
-  // 2. Obtener padrón oficial de votantes (Supabase / Store)
-  const { records: padronRecords } = await getPadronRecordsAsync();
+  // 2. Obtener padrón oficial de votantes (Supabase / Store con filtro Multi-Tenant)
+  const { records: padronRecords } = await getPadronRecordsAsync({
+    rbd: schoolId,
+    slepId,
+  });
 
   // 3. Obtener actas oficiales de voto (Supabase / Store)
-  const { records: votingRecords } = await getVotingRecordsAsync();
+  const { records: rawVotingRecords } = await getVotingRecordsAsync();
+  const votingRecords = rawVotingRecords.filter((v) => {
+    if (schoolId !== 'ALL' && v.rbdEstablecimiento !== schoolId) return false;
+    return true;
+  });
 
-  const tallies = getVoteTallies();
-  const schoolsVotedMap = getSchoolsVoted();
+  const tallies = getVoteTallies(slepId, schoolId);
+  const schoolsVotedMap = getSchoolsVoted(slepId);
 
   // ── Padrón totals por estamento ──────────────────────────────────────────
   const padron = {

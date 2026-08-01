@@ -65,7 +65,7 @@ export async function recordVoteInSupabase({
   rbd?: string;
   nombreEstablecimiento?: string;
   email?: string;
-}): Promise<{ success: boolean; comprobanteId: string }> {
+}): Promise<{ success: boolean; comprobanteId: string; folio?: string; receiptCode?: string }> {
   try {
     const { data, error } = await supabaseAdmin.rpc('emitir_voto_atomico', {
       p_rut: rut.toLowerCase().trim(),
@@ -76,18 +76,36 @@ export async function recordVoteInSupabase({
       p_email: email,
     });
 
-    if (!error && data?.success) {
+    if (error) {
+      const msg = error.message || '';
+      if (msg.includes('ALREADY_VOTED') || msg.includes('ya ha emitido su voto')) {
+        const err = Object.assign(new Error('Ya has emitido tu voto en esta eleccion.'), { code: 'ALREADY_VOTED' });
+        throw err;
+      }
+      if (msg.includes('VOTANTE_INHABILITADO') || msg.includes('inhabilitado')) {
+        const err = Object.assign(new Error('El votante se encuentra inhabilitado para participar.'), { code: 'VOTANTE_INHABILITADO' });
+        throw err;
+      }
+      if (msg.includes('VOTANTE_NO_ENCONTRADO') || msg.includes('no fue encontrado')) {
+        const err = Object.assign(new Error('Votante no encontrado en el padrón electoral.'), { code: 'VOTANTE_NO_ENCONTRADO' });
+        throw err;
+      }
+      console.error('[SUPABASE RPC] Error en RPC emitir_voto_atomico:', msg);
+    }
+
+    if (data?.success) {
       return {
         success: true,
         comprobanteId: data.receiptCode || data.folio,
+        receiptCode: data.receiptCode,
+        folio: data.folio,
       };
     }
-
-    if (error && !error.message.includes('function') && !error.message.includes('schema')) {
-      console.error('[SUPABASE RPC] Error en RPC emitir_voto_atomico:', error.message);
-    }
   } catch (rpcErr) {
-    console.warn('[SUPABASE RPC] Fallback a inserción cliente:', rpcErr);
+    if ((rpcErr as Record<string, unknown>)?.code) {
+      throw rpcErr;
+    }
+    console.warn('[SUPABASE RPC] Fallback a inserción individual:', rpcErr);
   }
 
   const comprobanteId = `COMP-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
@@ -107,12 +125,16 @@ export async function recordVoteInSupabase({
 
   // 2. Registrar la participación (asociada al RUT pero separada del sentido del voto)
   const { error: participationError } = await supabaseAdmin
-    .from('registro_participacion')
+    .from('acta_sufragio')
     .insert([
       {
-        rut: rut.toLowerCase().trim(),
-        comprobante_id: comprobanteId,
-        voted_at: new Date().toISOString(),
+        folio: comprobanteId,
+        rut_votante: rut.toLowerCase().trim(),
+        email_registrado: email,
+        estamento,
+        rbd_establecimiento: rbd,
+        nombre_establecimiento: nombreEstablecimiento,
+        fecha_hora: new Date().toISOString(),
       },
     ]);
 
@@ -122,3 +144,4 @@ export async function recordVoteInSupabase({
 
   return { success: true, comprobanteId };
 }
+

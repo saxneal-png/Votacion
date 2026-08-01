@@ -35,6 +35,7 @@ export function recordVote(
   candidateId: string,
   estamento: Estamento,
   schoolId: string,
+  _slepId: string = 'slep-principal',
 ) {
   voteTallies.set(candidateId, (voteTallies.get(candidateId) ?? 0) + 1);
 
@@ -44,11 +45,11 @@ export function recordVote(
   schoolsVoted.get(schoolId)!.add(estamento);
 }
 
-export function getVoteTallies(): ReadonlyMap<string, number> {
+export function getVoteTallies(_slepId?: string, _schoolId?: string): ReadonlyMap<string, number> {
   return voteTallies;
 }
 
-export function getSchoolsVoted(): ReadonlyMap<string, ReadonlySet<Estamento>> {
+export function getSchoolsVoted(_slepId?: string): ReadonlyMap<string, ReadonlySet<Estamento>> {
   return schoolsVoted;
 }
 

@@ -19,6 +19,8 @@ export interface PadronRecord {
   estamento: EstamentoDecreto102;
   rbdEstablecimiento: string;
   nombreEstablecimiento: string;
+  slepId?: string;
+  schoolId?: string;
   habilitado: boolean;
   haVotado: boolean;
   fechaVoto: string | null;
@@ -763,6 +765,8 @@ function mapRowToPadronRecord(item: Record<string, unknown>): PadronRecord {
     estamento: String(item.estamento ?? '') as EstamentoDecreto102,
     rbdEstablecimiento: String(item.rbd_establecimiento ?? ''),
     nombreEstablecimiento: String(item.nombre_establecimiento ?? ''),
+    slepId: item.slep_id ? String(item.slep_id) : 'slep-principal',
+    schoolId: item.school_id ? String(item.school_id) : String(item.rbd_establecimiento ?? ''),
     habilitado: Boolean(item.habilitado ?? true),
     haVotado: Boolean(item.ha_votado ?? false),
     fechaVoto: item.fecha_voto ? String(item.fecha_voto) : null,
@@ -777,12 +781,14 @@ export async function getPadronRecordsAsync({
   search = '',
   estamento = '',
   rbd = '',
+  slepId = '',
   page = 1,
   pageSize = 50,
 }: {
   search?: string;
   estamento?: string;
   rbd?: string;
+  slepId?: string;
   page?: number;
   pageSize?: number;
 } = {}): Promise<{
@@ -799,6 +805,9 @@ export async function getPadronRecordsAsync({
       .select('*', { count: 'exact' })
       .order('nombre_completo', { ascending: true });
 
+    if (slepId && slepId !== 'ALL') {
+      query = query.eq('slep_id', slepId);
+    }
     if (estamento && estamento !== 'ALL') {
       query = query.eq('estamento', estamento.toUpperCase());
     }

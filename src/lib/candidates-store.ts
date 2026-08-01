@@ -1,5 +1,14 @@
 import type { Candidate, Estamento } from '@/types';
 import { supabaseAdmin } from '@/lib/supabase-client';
+import { unstable_cache, revalidateTag } from 'next/cache';
+
+function revalidateCandidatesCache() {
+  try {
+    revalidateTag('candidates');
+  } catch (err) {
+    // Se ignora silenciosamente si se invoca fuera del contexto de petición de Next.js (ej. Vitest)
+  }
+}
 
 export interface CandidateFormData {
   nombreCompleto: string;
@@ -366,7 +375,26 @@ function mapRowToCandidate(item: Record<string, unknown>): Candidate {
 }
 
 /**
- * Obtener candidatos desde Supabase con fallback en memoria
+ * Consulta cacheada con Next.js unstable_cache (ISR de baja latencia)
+ */
+const getCachedCandidatesFromSupabase = unstable_cache(
+  async () => {
+    const { data, error } = await supabaseAdmin
+      .from('candidatos')
+      .select('*')
+      .order('created_at', { ascending: true });
+
+    if (error || !data) {
+      return null;
+    }
+    return data;
+  },
+  ['candidates-store-list-v1'],
+  { revalidate: 300, tags: ['candidates'] },
+);
+
+/**
+ * Obtener candidatos desde Supabase con caché ISR de Next.js y fallback en memoria
  */
 export async function getCandidatosAsync({
   estamento = '',
@@ -376,28 +404,18 @@ export async function getCandidatosAsync({
   search?: string;
 } = {}): Promise<Candidate[]> {
   try {
-    let query = supabaseAdmin
-      .from('candidatos')
-      .select('*')
-      .order('created_at', { ascending: true });
+    const cachedData = await getCachedCandidatesFromSupabase();
+
+    if (!cachedData || cachedData.length === 0) {
+      return getCandidatos({ estamento, search });
+    }
+
+    let results = cachedData.map((item) => mapRowToCandidate(item as Record<string, unknown>));
 
     if (estamento && estamento !== 'ALL') {
-      const variants = getEstamentoVariants(estamento);
-      query = query.in('estamento', variants);
+      const variants = getEstamentoVariants(estamento).map((v) => v.toLowerCase());
+      results = results.filter((c) => variants.includes(c.estamento.toLowerCase()));
     }
-
-    const { data, error } = await query;
-
-    if (error) {
-      console.error('[SUPABASE] Error leyendo candidatos:', error.message);
-      return getCandidatos({ estamento, search });
-    }
-
-    if (!data || data.length === 0) {
-      return getCandidatos({ estamento, search });
-    }
-
-    let results = data.map((item) => mapRowToCandidate(item as Record<string, unknown>));
 
     if (search) {
       const q = search.toLowerCase().trim();
@@ -441,6 +459,7 @@ export async function addCandidatoAsync(data: CandidateFormData): Promise<Candid
       console.error('[SUPABASE] Error insertando candidato:', error.message);
     } else {
       console.log('[SUPABASE] Candidato insertado en Supabase:', local.id);
+      revalidateCandidatesCache();
     }
   } catch (err) {
     console.error('[SUPABASE] Excepción al insertar candidato:', err);
@@ -473,6 +492,7 @@ export async function updateCandidatoAsync(id: string, data: Partial<CandidateFo
       console.error('[SUPABASE] Error actualizando candidato:', error.message);
     } else {
       console.log('[SUPABASE] Candidato actualizado en Supabase:', id);
+      revalidateCandidatesCache();
     }
   } catch (err) {
     console.error('[SUPABASE] Excepción al actualizar candidato:', err);
@@ -498,6 +518,7 @@ export async function deleteCandidatoAsync(id: string): Promise<boolean> {
         console.error('[SUPABASE] Error eliminando candidato:', error.message);
       } else {
         console.log('[SUPABASE] Candidato eliminado de Supabase:', id);
+        revalidateCandidatesCache();
       }
     } catch (err) {
       console.error('[SUPABASE] Excepción al eliminar candidato:', err);

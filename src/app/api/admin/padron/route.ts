@@ -20,11 +20,12 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const search = searchParams.get('search') ?? '';
   const estamento = searchParams.get('estamento') ?? '';
-  const rbd = searchParams.get('rbd') ?? '';
+  const rbd = searchParams.get('rbd') ?? searchParams.get('school_id') ?? '';
+  const slepId = searchParams.get('slep_id') ?? searchParams.get('slepId') ?? '';
   const page = parseInt(searchParams.get('page') ?? '1', 10) || 1;
   const pageSize = parseInt(searchParams.get('pageSize') ?? '50', 10) || 50;
 
-  const data = await getPadronRecordsAsync({ search, estamento, rbd, page, pageSize });
+  const data = await getPadronRecordsAsync({ search, estamento, rbd, slepId, page, pageSize });
   return NextResponse.json(data, {
     headers: { 'Cache-Control': 'no-store' },
   });

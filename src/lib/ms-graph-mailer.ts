@@ -149,3 +149,39 @@ export async function sendOtpEmail({
 
   return { success: true };
 }
+
+/**
+ * Encola el envío de correo OTP a través de Upstash QStash o ejecutor asíncrono.
+ * Si no está configurada la cola, realiza el envío síncrono transparente.
+ */
+export async function enqueueOtpEmail(params: SendOtpEmailParams): Promise<{ queued: boolean; messageId?: string }> {
+  const qstashToken = process.env.QSTASH_TOKEN;
+  const appBaseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+
+  if (qstashToken) {
+    try {
+      const qstashUrl = `https://qstash.upstash.io/v2/publish/${appBaseUrl}/api/jobs/send-email`;
+      const response = await fetch(qstashUrl, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${qstashToken}`,
+          'Content-Type': 'application/json',
+          'Upstash-Retries': '3',
+        },
+        body: JSON.stringify(params),
+      });
+
+      if (response.ok) {
+        const resData = (await response.json()) as { messageId?: string };
+        console.log('[QSTASH] Correo OTP encolado con éxito:', resData.messageId);
+        return { queued: true, messageId: resData.messageId };
+      }
+    } catch (err) {
+      console.error('[QSTASH] Error publicando en cola QStash, ejecutando envío directo:', err);
+    }
+  }
+
+  // Fallback directo si no se utiliza QStash
+  const directResult = await sendOtpEmail(params);
+  return { queued: false, messageId: directResult.messageId };
+}

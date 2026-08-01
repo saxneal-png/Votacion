@@ -8,12 +8,14 @@ interface AccessibilityPanelProps {
   isPrivacyMode: boolean;
   isSimplifiedMode: boolean;
   isReducedMotion: boolean;
+  isTtsEnabled?: boolean;
   fontScale: FontScale;
   onToggleOpen: () => void;
   onHighContrastChange: (enabled: boolean) => void;
   onPrivacyModeChange: (enabled: boolean) => void;
   onSimplifiedModeChange: (enabled: boolean) => void;
   onReducedMotionChange: (enabled: boolean) => void;
+  onTtsToggleChange?: (enabled: boolean) => void;
   onFontScaleChange: (value: FontScale) => void;
 }
 
@@ -63,14 +65,36 @@ export function AccessibilityPanel({
   isPrivacyMode,
   isSimplifiedMode,
   isReducedMotion,
+  isTtsEnabled = false,
   fontScale,
   onToggleOpen,
   onHighContrastChange,
   onPrivacyModeChange,
   onSimplifiedModeChange,
   onReducedMotionChange,
+  onTtsToggleChange,
   onFontScaleChange,
 }: AccessibilityPanelProps) {
+  const speakCurrentPageText = () => {
+    if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
+      alert('Tu navegador no soporta sintetización de voz (Web Speech API).');
+      return;
+    }
+
+    window.speechSynthesis.cancel();
+    const textToRead = document.querySelector('main')?.textContent || document.body.textContent || 'Portal de Votación Digital';
+    const utterance = new SpeechSynthesisUtterance(textToRead.substring(0, 500));
+    utterance.lang = 'es-CL';
+    utterance.rate = 0.95;
+    window.speechSynthesis.speak(utterance);
+  };
+
+  const stopSpeaking = () => {
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+    }
+  };
+
   return (
     <div className="fixed bottom-4 right-4 z-40 flex flex-col items-end gap-3">
       {isOpen ? (
@@ -95,7 +119,7 @@ export function AccessibilityPanel({
           </div>
 
           <div className="mt-3 grid gap-3">
-            <div className="grid grid-cols-4 gap-2">
+            <div className="grid grid-cols-5 gap-1.5">
               <ControlButton
                 label="Contraste alto"
                 active={isHighContrast}
@@ -126,6 +150,19 @@ export function AccessibilityPanel({
                 onClick={() => onReducedMotionChange(!isReducedMotion)}
               >
                 <AccessibilityIcon path="M5 12h5m4 0h5M12 5v5m0 4v5" />
+              </ControlButton>
+
+              <ControlButton
+                label="Lectura por voz (TTS opcional)"
+                active={isTtsEnabled}
+                onClick={() => {
+                  const nextState = !isTtsEnabled;
+                  onTtsToggleChange?.(nextState);
+                  if (nextState) speakCurrentPageText();
+                  else stopSpeaking();
+                }}
+              >
+                <AccessibilityIcon path="M11 5L6 9H2v6h4l5 4V5zm4 3a4 4 0 010 8M17 5a8 8 0 010 14" />
               </ControlButton>
             </div>
 
