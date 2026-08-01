@@ -1,5 +1,11 @@
 import { cleanAndValidateRUT } from '@/lib/rut-validator';
-import { EstamentoDecreto102, getPadronRecords, getPadronRecordsAsync, PadronRecord } from '@/lib/padron-store';
+import {
+  EstamentoDecreto102,
+  findApoderadoRecordsAsync,
+  findFuncionarioRecordAsync,
+  getPadronRecords,
+  PadronRecord,
+} from '@/lib/padron-store';
 import { getMockUserByRut } from '@/lib/mock-api';
 
 export interface TempTokenPayload {
@@ -109,8 +115,57 @@ export async function validateApoderadoAuthAsync(
   rutEstudiante: string,
   email: string,
 ): Promise<PadronRecord> {
-  await getPadronRecordsAsync();
-  return validateApoderadoAuth(rutApoderado, rutEstudiante, email);
+  const valApoderado = cleanAndValidateRUT(rutApoderado);
+  const cleanApoderadoRut = cleanRut(rutApoderado);
+
+  if (!valApoderado.valid && cleanApoderadoRut.length < 7) {
+    throw new Error(`RUN de Apoderado inválido: ${valApoderado.errorReason}`);
+  }
+
+  const valEstudiante = cleanAndValidateRUT(rutEstudiante);
+  const cleanEstudianteRut = cleanRut(rutEstudiante);
+
+  if (!valEstudiante.valid && cleanEstudianteRut.length < 7) {
+    throw new Error(`RUN de Estudiante inválido: ${valEstudiante.errorReason}`);
+  }
+
+  if (!email || !email.includes('@')) {
+    throw new Error('Debes ingresar un correo electrónico de contacto válido.');
+  }
+
+  // 1. Consultar registros del apoderado directamente desde Supabase bd_padron (o memoria)
+  const allApoderadoRecords = await findApoderadoRecordsAsync(rutApoderado);
+
+  if (allApoderadoRecords.length === 0) {
+    throw new Error(
+      'El RUN del apoderado no se encuentra registrado en el padrón electoral.',
+    );
+  }
+
+  // 2. Buscar coincidencia exacta con el RUN del estudiante ingresado
+  const exactMatch = allApoderadoRecords.find(
+    (r) =>
+      r.rutEstudianteAsociado &&
+      cleanRut(r.rutEstudianteAsociado) === cleanEstudianteRut,
+  );
+
+  if (!exactMatch) {
+    throw new Error(
+      'El RUN del apoderado no se encuentra vinculado con el RUN del estudiante ingresado en el padrón electoral.',
+    );
+  }
+
+  // 3. Control de Sufragio Único por Apoderado (Multihijo):
+  const yaVoto = allApoderadoRecords.some((r) => r.haVotado);
+  if (yaVoto) {
+    throw new Error('Usted ya emitió su voto correspondiente al estamento de Padres y Apoderados.');
+  }
+
+  if (!exactMatch.habilitado) {
+    throw new Error('El apoderado se encuentra inhabilitado en el padrón electoral.');
+  }
+
+  return exactMatch;
 }
 
 /**
@@ -196,8 +251,68 @@ export async function validateFuncionarioAuthAsync(
   rutFuncionario: string,
   email: string,
 ): Promise<PadronRecord> {
-  await getPadronRecordsAsync();
-  return validateFuncionarioAuth(rutFuncionario, email);
+  const valFuncionario = cleanAndValidateRUT(rutFuncionario);
+  if (!valFuncionario.valid) {
+    throw new Error(`RUN de Funcionario inválido: ${valFuncionario.errorReason}`);
+  }
+
+  const cleanEmail = email.trim().toLowerCase();
+  if (!cleanEmail || !cleanEmail.includes('@')) {
+    throw new Error('Debes ingresar tu correo electrónico institucional.');
+  }
+
+  // Restricción de dominio para funcionarios
+  const isDomainValid =
+    cleanEmail.endsWith('@eduvallediguillin.gob.cl') ||
+    cleanEmail.endsWith('@slepvallediguillin.gob.cl') ||
+    cleanEmail.endsWith('@slep.cl') ||
+    cleanEmail.includes('slep');
+
+  if (!isDomainValid) {
+    throw new Error(
+      'Los funcionarios del SLEP deben ingresar obligatoriamente con su casilla institucional (@eduvallediguillin.gob.cl).',
+    );
+  }
+
+  let funcionarioRecord = await findFuncionarioRecordAsync(rutFuncionario);
+
+  if (!funcionarioRecord) {
+    // Buscar en usuarios conocidos de prueba (mockUsers)
+    const mockUser = getMockUserByRut(valFuncionario.formattedRut);
+    if (mockUser && ['docentes', 'asistentes', 'directivos'].includes(mockUser.estamento.toLowerCase())) {
+      funcionarioRecord = {
+        id: `func-mock-${mockUser.rut}`,
+        rutVotante: mockUser.rut,
+        formattedRutVotante: mockUser.rut,
+        rutEstudianteAsociado: null,
+        formattedRutEstudiante: null,
+        nombreCompleto: mockUser.fullName,
+        estamento: mockUser.estamento.toUpperCase() as EstamentoDecreto102,
+        rbdEstablecimiento: '10202',
+        nombreEstablecimiento: mockUser.organization || 'Establecimiento SLEP',
+        habilitado: true,
+        haVotado: false,
+        fechaVoto: null,
+        createdAt: new Date().toISOString(),
+      };
+    }
+  }
+
+  if (!funcionarioRecord) {
+    throw new Error(
+      'El RUN ingresado no se encuentra registrado como funcionario ni asociado a un establecimiento educacional en el padrón electoral.',
+    );
+  }
+
+  if (funcionarioRecord.haVotado) {
+    throw new Error('Usted ya emitió su voto correspondiente al estamento de Funcionarios.');
+  }
+
+  if (!funcionarioRecord.habilitado) {
+    throw new Error('El funcionario se encuentra inhabilitado en el padrón electoral.');
+  }
+
+  return funcionarioRecord;
 }
 
 
