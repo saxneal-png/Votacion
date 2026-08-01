@@ -170,6 +170,59 @@ export function AdminView({
   const [uploadResult, setUploadResult] = useState<ExcelProcessingResult | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
 
+  // Catálogo Maestro (RBD) State
+  const [showSchoolsMasterModal, setShowSchoolsMasterModal] = useState(false);
+  const [schoolsMasterRecords, setSchoolsMasterRecords] = useState<Array<{ rbd: string; nombreOficial: string; comuna: string }>>([]);
+  const [loadingSchoolsMaster, setLoadingSchoolsMaster] = useState(false);
+  const [uploadingMaster, setUploadingMaster] = useState(false);
+  const [masterFile, setMasterFile] = useState<File | null>(null);
+  const [masterUploadMessage, setMasterUploadMessage] = useState<string | null>(null);
+
+  async function fetchSchoolsMaster() {
+    setLoadingSchoolsMaster(true);
+    try {
+      const res = await fetch('/api/admin/schools-master', { credentials: 'same-origin' });
+      if (res.ok) {
+        const data = (await res.json()) as { records: Array<{ rbd: string; nombreOficial: string; comuna: string }> };
+        setSchoolsMasterRecords(data.records || []);
+      }
+    } catch (err) {
+      console.error('Error al obtener catálogo maestro de colegios:', err);
+    } finally {
+      setLoadingSchoolsMaster(false);
+    }
+  }
+
+  async function handleUploadSchoolsMaster() {
+    if (!masterFile) return;
+    setUploadingMaster(true);
+    setMasterUploadMessage(null);
+    try {
+      const formData = new FormData();
+      formData.append('file', masterFile);
+
+      const res = await fetch('/api/admin/schools-master', {
+        method: 'POST',
+        body: formData,
+        credentials: 'same-origin',
+      });
+
+      const data = (await res.json()) as { success: boolean; totalLoaded?: number; message?: string };
+      if (res.ok && data.success) {
+        setMasterUploadMessage(`Catálogo actualizado exitosamente: ${data.totalLoaded} establecimientos ingestados.`);
+        setMasterFile(null);
+        void fetchSchoolsMaster();
+        void fetchPadron(1);
+      } else {
+        setMasterUploadMessage(data.message || 'Error al ingestar archivo de catálogo maestro.');
+      }
+    } catch (err) {
+      setMasterUploadMessage(err instanceof Error ? err.message : 'Error al ingestar catálogo maestro.');
+    } finally {
+      setUploadingMaster(false);
+    }
+  }
+
   // Formulario manual Votante
   const [newRutVotante, setNewRutVotante] = useState('');
   const [newRutEstudiante, setNewRutEstudiante] = useState('');
@@ -1163,6 +1216,18 @@ az webapp config appsettings set --resource-group rg-slep-elecciones --name vota
                   className="h-10 px-3.5 rounded-xl bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold transition flex items-center gap-1.5 shadow-sm"
                 >
                   <span>👤+</span> Agregar Votante
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowSchoolsMasterModal(true);
+                    void fetchSchoolsMaster();
+                  }}
+                  className="h-10 px-3.5 rounded-xl bg-purple-700 hover:bg-purple-800 text-white text-xs font-bold transition flex items-center gap-1.5 shadow-sm"
+                  title="Subir base teórica de colegios por RBD para autocorrección ortográfica"
+                >
+                  <span>🏫</span> Catálogo Maestro (RBD)
                 </button>
 
                 <button
@@ -2545,6 +2610,105 @@ CMD ["npm", "start"]`}
                 className="px-5 py-2 rounded-xl bg-purple-700 hover:bg-purple-800 text-white text-xs font-extrabold transition shadow-md"
               >
                 Entendido
+              </button>
+            </div>
+          </div>
+        </div>
+      {/* Modal Catálogo Maestro de Colegios por RBD */}
+      {showSchoolsMasterModal ? (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-3xl w-full p-6 space-y-4 shadow-2xl border border-purple-200 animate-in fade-in zoom-in-95">
+            <div className="flex items-center justify-between border-b pb-3 border-purple-100">
+              <div className="flex items-center gap-3 text-purple-700">
+                <span className="text-3xl">🏫</span>
+                <div>
+                  <h3 className="font-serif font-bold text-lg text-slate-900 m-0">
+                    Catálogo Maestro de Establecimientos Educacionales (RBD)
+                  </h3>
+                  <p className="text-xs text-purple-700 font-semibold m-0">
+                    Base teórica oficial de colegios para autocorrección ortográfica al ingestar el padrón
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowSchoolsMasterModal(false)}
+                className="text-slate-400 hover:text-slate-600 font-bold text-sm px-2 py-1 rounded"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Zona de Carga de Archivo Maestro */}
+            <div className="p-4 bg-purple-50/70 rounded-xl border border-purple-100 space-y-3">
+              <label className="block text-xs font-bold text-slate-700 uppercase">
+                Subir Catálogo Maestro Excel / CSV (Encabezados: RBD | establecimientos | Comuna)
+              </label>
+              <div className="flex items-center gap-3">
+                <input
+                  type="file"
+                  accept=".xlsx,.xls,.csv"
+                  onChange={(e) => setMasterFile(e.target.files?.[0] || null)}
+                  className="block w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-purple-100 file:text-purple-800 hover:file:bg-purple-200 cursor-pointer"
+                />
+                <button
+                  type="button"
+                  disabled={!masterFile || uploadingMaster}
+                  onClick={handleUploadSchoolsMaster}
+                  className="h-9 px-4 bg-purple-700 hover:bg-purple-800 disabled:opacity-50 text-white text-xs font-bold rounded-xl transition flex items-center gap-1.5 whitespace-nowrap shadow-sm"
+                >
+                  {uploadingMaster ? 'Cargando...' : '📥 Ingestar Catálogo'}
+                </button>
+              </div>
+              {masterUploadMessage && (
+                <p className={`text-xs font-bold m-0 ${masterUploadMessage.includes('error') || masterUploadMessage.includes('Error') ? 'text-red-600' : 'text-emerald-700'}`}>
+                  {masterUploadMessage}
+                </p>
+              )}
+            </div>
+
+            {/* Lista / Tabla de Colegios Maestros */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-xs font-bold text-slate-700">
+                <span>Colegios Maestros Registrados ({schoolsMasterRecords.length})</span>
+                {loadingSchoolsMaster && <span className="text-purple-600 animate-pulse">Cargando...</span>}
+              </div>
+
+              <div className="max-h-60 overflow-y-auto border border-slate-200 rounded-xl bg-slate-50">
+                {schoolsMasterRecords.length === 0 ? (
+                  <div className="p-6 text-center text-xs text-slate-400 font-medium">
+                    No hay establecimientos cargados en el catálogo maestro. Sube un archivo Excel con los campos <strong>RBD</strong>, <strong>establecimientos</strong> y <strong>Comuna</strong>.
+                  </div>
+                ) : (
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-slate-100 text-slate-600 font-bold uppercase sticky top-0 border-b border-slate-200">
+                      <tr>
+                        <th className="p-2.5">RBD</th>
+                        <th className="p-2.5">Nombre Oficial del Establecimiento</th>
+                        <th className="p-2.5">Comuna</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 font-medium">
+                      {schoolsMasterRecords.map((sch) => (
+                        <tr key={sch.rbd} className="hover:bg-white transition">
+                          <td className="p-2.5 font-mono font-bold text-purple-900">{sch.rbd}</td>
+                          <td className="p-2.5 font-semibold text-slate-900">{sch.nombreOficial}</td>
+                          <td className="p-2.5 text-slate-600">{sch.comuna || '—'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            </div>
+
+            <div className="flex justify-end pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setShowSchoolsMasterModal(false)}
+                className="px-5 py-2 rounded-xl bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold transition"
+              >
+                Cerrar
               </button>
             </div>
           </div>

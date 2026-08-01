@@ -1,6 +1,7 @@
 import * as XLSX from 'xlsx';
 import { cleanAndValidateRUT, formatRut } from '@/lib/rut-validator';
 import { supabaseAdmin } from '@/lib/supabase-client';
+import { getSchoolsMasterMapAsync, SchoolMasterRecord } from '@/lib/schools-master-store';
 
 export type EstamentoDecreto102 =
   | 'ESTUDIANTES'
@@ -337,7 +338,10 @@ export function deleteVoterRecord(id: string): boolean {
 /**
  * Ingesta Masiva desde Buffer de Excel (.xlsx / .xlsm)
  */
-export function processPadronExcelBuffer(buffer: Buffer): ExcelProcessingResult {
+export function processPadronExcelBuffer(
+  buffer: Buffer,
+  masterMap?: Map<string, SchoolMasterRecord>,
+): ExcelProcessingResult {
   const workbook = XLSX.read(buffer, { type: 'buffer' });
 
   if (!workbook.SheetNames || workbook.SheetNames.length === 0) {
@@ -671,6 +675,12 @@ export function processPadronExcelBuffer(buffer: Buffer): ExcelProcessingResult 
         continue;
       }
 
+      const cleanRbdStr = String(rawRbd || '10101').replace(/[^0-9]/g, '').trim();
+      const masterSchool = masterMap?.get(cleanRbdStr);
+      const nombreEstablecimientoFinal = masterSchool
+        ? masterSchool.nombreOficial
+        : (rawNombreColegio || 'Establecimiento SLEP').trim();
+
       // 6. Inserción en Lote
       padronStore.push({
         id: `padron-excel-${Date.now()}-${r}-${Math.random().toString(36).substring(2, 5)}`,
@@ -680,8 +690,8 @@ export function processPadronExcelBuffer(buffer: Buffer): ExcelProcessingResult 
         formattedRutEstudiante: formattedStudentRut,
         nombreCompleto: rawNombreCompleto.trim(),
         estamento: estamentoEnum,
-        rbdEstablecimiento: (rawRbd || '10101').trim(),
-        nombreEstablecimiento: (rawNombreColegio || 'Establecimiento SLEP').trim(),
+        rbdEstablecimiento: cleanRbdStr || '10101',
+        nombreEstablecimiento: nombreEstablecimientoFinal,
         habilitado: true,
         haVotado: false,
         fechaVoto: null,
@@ -1049,8 +1059,8 @@ export async function deleteVoterRecordAsync(id: string): Promise<boolean> {
  * Carga masiva de Excel con persistencia en Supabase
  */
 export async function processPadronExcelBufferAsync(buffer: Buffer): Promise<ExcelProcessingResult> {
-  // Procesar el Excel usando la función síncrona (que agrega a padronStore en memoria)
-  const result = processPadronExcelBuffer(buffer);
+  const masterMap = await getSchoolsMasterMapAsync();
+  const result = processPadronExcelBuffer(buffer, masterMap);
 
   // Sincronizar los registros nuevos a Supabase en lotes
   if (result.registrosInsertados > 0) {

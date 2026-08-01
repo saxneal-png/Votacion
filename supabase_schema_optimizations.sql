@@ -187,3 +187,24 @@ BEGIN
   );
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- -----------------------------------------------------------------------------
+-- TABLA MAESTRO DE ESTABLECIMIENTOS EDUCACIONALES OFICIALES (BASE TEÓRICA POR RBD)
+-- -----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS bd_establecimientos_maestro (
+    rbd VARCHAR(20) PRIMARY KEY,
+    nombre_oficial TEXT NOT NULL,
+    comuna TEXT DEFAULT '',
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_establecimientos_maestro_rbd ON bd_establecimientos_maestro(rbd);
+
+ALTER TABLE bd_establecimientos_maestro ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Lectura pública de catálogo maestro" ON bd_establecimientos_maestro
+    FOR SELECT USING (true);
+
+CREATE POLICY "Administración total de catálogo maestro" ON bd_establecimientos_maestro
+    FOR ALL USING (auth.role() = 'service_role');
+
