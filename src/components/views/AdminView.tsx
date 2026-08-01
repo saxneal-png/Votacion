@@ -97,6 +97,48 @@ export function AdminView({
 }: AdminViewProps) {
   const [activeTab, setActiveTab] = useState<AdminTab>('padron');
   
+  // Fase 3 State: IA & Web Semántica
+  const [closingElection, setClosingElection] = useState(false);
+  const [closeElectionResult, setCloseElectionResult] = useState<{
+    success: boolean;
+    fechaCierre?: string;
+    actaResumen?: string;
+    metricsSummary?: { totalPadron: number; totalVotesCast: number; porcentajeParticipacion: string };
+  } | null>(null);
+
+  async function handleCloseElection() {
+    if (!confirm('¿Deseas cerrar oficialmente la elección y generar el Acta Formal con IA Gemini?')) return;
+    setClosingElection(true);
+    try {
+      const res = await fetch('/api/admin/close-election', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ generateAiSummary: true, triggerAppsScript: false }),
+        credentials: 'same-origin',
+      });
+      const data = (await res.json()) as {
+        success: boolean;
+        actaResumen?: string;
+        metricsSummary?: { totalPadron: number; totalVotesCast: number; porcentajeParticipacion: string };
+        message?: string;
+      };
+
+      if (res.ok && data.success) {
+        setCloseElectionResult(data);
+      } else {
+        alert(data.message || 'No fue posible cerrar la elección.');
+      }
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Error al cerrar la elección.');
+    } finally {
+      setClosingElection(false);
+    }
+  }
+
+  function handleDownloadSemantic(format: 'jsonld' | 'turtle') {
+    window.open(`/api/admin/export-semantic?format=${format}`, '_blank');
+  }
+
   // Padrón State
   const [padronRecords, setPadronRecords] = useState<PadronRecord[]>([]);
   const [totalPadronRecords, setTotalPadronRecords] = useState(0);
@@ -830,7 +872,7 @@ az webapp config appsettings set --resource-group rg-slep-elecciones --name vota
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <span className="text-xs text-blue-200 hidden sm:inline">
               Actualizado {relativeTime(metrics.lastUpdated)}
             </span>
@@ -843,6 +885,37 @@ az webapp config appsettings set --resource-group rg-slep-elecciones --name vota
             >
               <span className={refreshing ? 'animate-spin' : ''}>🔄</span>
               {refreshing ? 'Actualizando...' : 'Refrescar'}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleDownloadSemantic('jsonld')}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold shadow-sm transition"
+              title="Descargar datos en formato JSON-LD (Web Semántica / Grafos)"
+            >
+              <span>🌐</span>
+              JSON-LD
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleDownloadSemantic('turtle')}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-teal-700 hover:bg-teal-800 text-white text-xs font-bold shadow-sm transition"
+              title="Descargar datos en formato RDF Turtle (.ttl)"
+            >
+              <span>🐢</span>
+              Turtle (.ttl)
+            </button>
+
+            <button
+              type="button"
+              onClick={handleCloseElection}
+              disabled={closingElection}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-purple-700 hover:bg-purple-800 text-white text-xs font-extrabold shadow-sm transition disabled:opacity-50"
+              title="Cerrar elección y generar Acta Formal con IA Gemini"
+            >
+              <span>🤖</span>
+              {closingElection ? 'Cerrando...' : 'Cierre con IA'}
             </button>
 
             <button
@@ -2400,6 +2473,78 @@ CMD ["npm", "start"]`}
               >
                 <span className={clearingPadron ? 'animate-spin' : ''}>🗑️</span>
                 {clearingPadron ? 'Eliminando Padrón...' : 'Sí, Eliminar Padrón Completo'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {/* Modal Cierre de Elección & Acta IA Gemini */}
+      {closeElectionResult ? (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-2xl w-full p-6 space-y-4 shadow-2xl border border-purple-200 animate-in fade-in zoom-in-95">
+            <div className="flex items-center justify-between border-b pb-3 border-purple-100">
+              <div className="flex items-center gap-3 text-purple-700">
+                <span className="text-3xl">🤖</span>
+                <div>
+                  <h3 className="font-serif font-bold text-lg text-slate-900 m-0">
+                    Acta Formal de Cierre con IA Gemini
+                  </h3>
+                  <p className="text-xs text-purple-700 font-semibold m-0">
+                    Cierre verificado • {closeElectionResult.fechaCierre}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setCloseElectionResult(null)}
+                className="text-slate-400 hover:text-slate-600 font-bold text-sm px-2 py-1 rounded"
+              >
+                ✕
+              </button>
+            </div>
+
+            {closeElectionResult.metricsSummary ? (
+              <div className="grid grid-cols-3 gap-3 p-3 bg-purple-50 rounded-xl border border-purple-100 text-center">
+                <div>
+                  <p className="text-[10px] font-bold text-purple-700 uppercase m-0">Padrón</p>
+                  <p className="text-base font-extrabold text-slate-900 m-0">{closeElectionResult.metricsSummary.totalPadron}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] font-bold text-purple-700 uppercase m-0">Votos Emitidos</p>
+                  <p className="text-base font-extrabold text-slate-900 m-0">{closeElectionResult.metricsSummary.totalVotesCast}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] font-bold text-purple-700 uppercase m-0">Participación</p>
+                  <p className="text-base font-extrabold text-slate-900 m-0">{closeElectionResult.metricsSummary.porcentajeParticipacion}</p>
+                </div>
+              </div>
+            ) : null}
+
+            <div className="max-h-[340px] overflow-y-auto p-4 bg-slate-900 text-emerald-300 font-mono text-xs rounded-xl border border-slate-800 leading-relaxed whitespace-pre-wrap">
+              {closeElectionResult.actaResumen}
+            </div>
+
+            <div className="flex items-center justify-between pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  if (closeElectionResult.actaResumen) {
+                    void navigator.clipboard.writeText(closeElectionResult.actaResumen);
+                    alert('Acta copiada al portapapeles.');
+                  }
+                }}
+                className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold transition flex items-center gap-1.5"
+              >
+                📋 Copiar Texto del Acta
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setCloseElectionResult(null)}
+                className="px-5 py-2 rounded-xl bg-purple-700 hover:bg-purple-800 text-white text-xs font-extrabold transition shadow-md"
+              >
+                Entendido
               </button>
             </div>
           </div>

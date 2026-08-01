@@ -187,6 +187,7 @@ export default function HomePage() {
   const [isPrivacyMode, setIsPrivacyMode] = useState(false);
   const [isSimplifiedMode, setIsSimplifiedMode] = useState(false);
   const [isReducedMotion, setIsReducedMotion] = useState(false);
+  const [isTtsEnabled, setIsTtsEnabled] = useState(false);
   const [fontScale, setFontScale] = useState<FontScale>('normal');
   const [isAccessibilityPanelOpen, setIsAccessibilityPanelOpen] = useState(false);
   const [idleWarningSeconds, setIdleWarningSeconds] = useState<number | null>(null);
@@ -667,12 +668,14 @@ export default function HomePage() {
         isPrivacyMode={isPrivacyMode}
         isSimplifiedMode={isSimplifiedMode}
         isReducedMotion={isReducedMotion}
+        isTtsEnabled={isTtsEnabled}
         fontScale={fontScale}
         onToggleOpen={() => setIsAccessibilityPanelOpen((currentValue) => !currentValue)}
         onHighContrastChange={setIsHighContrast}
         onPrivacyModeChange={setIsPrivacyMode}
         onSimplifiedModeChange={setIsSimplifiedMode}
         onReducedMotionChange={setIsReducedMotion}
+        onTtsToggleChange={setIsTtsEnabled}
         onFontScaleChange={setFontScale}
       />
 
