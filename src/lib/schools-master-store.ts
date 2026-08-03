@@ -183,3 +183,100 @@ export async function getSchoolsMasterMapAsync(): Promise<Map<string, SchoolMast
 
   return map;
 }
+
+/**
+ * Edita un establecimiento maestro existente por RBD
+ */
+export async function updateSchoolMasterAsync(
+  rbd: string,
+  data: { nombreOficial: string; comuna: string }
+): Promise<boolean> {
+  const cleanRbd = String(rbd).replace(/[^0-9]/g, '').trim();
+  if (!cleanRbd) return false;
+
+  const idx = schoolsMasterStore.findIndex((s) => s.rbd === cleanRbd);
+  if (idx >= 0) {
+    schoolsMasterStore[idx] = {
+      ...schoolsMasterStore[idx],
+      nombreOficial: data.nombreOficial.trim(),
+      comuna: data.comuna.trim(),
+    };
+  }
+
+  if (supabaseAdmin) {
+    try {
+      const { error } = await supabaseAdmin
+        .from('bd_establecimientos_maestro')
+        .update({
+          nombre_oficial: data.nombreOficial.trim(),
+          comuna: data.comuna.trim(),
+        })
+        .eq('rbd', cleanRbd);
+
+      if (error) {
+        console.error('[SUPABASE] Error al actualizar establecimiento maestro:', error.message);
+        return false;
+      }
+    } catch (err) {
+      console.error('[SUPABASE] Excepción al actualizar establecimiento maestro:', err);
+    }
+  }
+
+  return true;
+}
+
+/**
+ * Elimina un establecimiento maestro por RBD
+ */
+export async function deleteSchoolMasterAsync(rbd: string): Promise<boolean> {
+  const cleanRbd = String(rbd).replace(/[^0-9]/g, '').trim();
+  if (!cleanRbd) return false;
+
+  const idx = schoolsMasterStore.findIndex((s) => s.rbd === cleanRbd);
+  if (idx >= 0) {
+    schoolsMasterStore.splice(idx, 1);
+  }
+
+  if (supabaseAdmin) {
+    try {
+      const { error } = await supabaseAdmin
+        .from('bd_establecimientos_maestro')
+        .delete()
+        .eq('rbd', cleanRbd);
+
+      if (error) {
+        console.error('[SUPABASE] Error al eliminar establecimiento maestro:', error.message);
+        return false;
+      }
+    } catch (err) {
+      console.error('[SUPABASE] Excepción al eliminar establecimiento maestro:', err);
+    }
+  }
+
+  return true;
+}
+
+/**
+ * Elimina todos los establecimientos maestros (Vaciar Catálogo Completo)
+ */
+export async function clearSchoolsMasterAsync(): Promise<boolean> {
+  schoolsMasterStore.length = 0;
+
+  if (supabaseAdmin) {
+    try {
+      const { error } = await supabaseAdmin
+        .from('bd_establecimientos_maestro')
+        .delete()
+        .neq('rbd', '');
+
+      if (error) {
+        console.error('[SUPABASE] Error al vaciar catálogo maestro de establecimientos:', error.message);
+        return false;
+      }
+    } catch (err) {
+      console.error('[SUPABASE] Excepción al vaciar catálogo maestro:', err);
+    }
+  }
+
+  return true;
+}

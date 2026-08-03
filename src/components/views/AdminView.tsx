@@ -223,6 +223,105 @@ export function AdminView({
     }
   }
 
+  // Estados para Edición / Eliminación en Catálogo Maestro
+  const [editingSchoolRbd, setEditingSchoolRbd] = useState<string | null>(null);
+  const [editNombreOficial, setEditNombreOficial] = useState('');
+  const [editComuna, setEditComuna] = useState('');
+  const [savingMasterEdit, setSavingMasterEdit] = useState(false);
+  const [clearingMasterCatalog, setClearingMasterCatalog] = useState(false);
+
+  function handleStartEditMasterSchool(sch: { rbd: string; nombreOficial: string; comuna: string }) {
+    setEditingSchoolRbd(sch.rbd);
+    setEditNombreOficial(sch.nombreOficial);
+    setEditComuna(sch.comuna || '');
+  }
+
+  function handleCancelEditMasterSchool() {
+    setEditingSchoolRbd(null);
+    setEditNombreOficial('');
+    setEditComuna('');
+  }
+
+  async function handleSaveEditMasterSchool() {
+    if (!editingSchoolRbd || !editNombreOficial.trim()) return;
+    setSavingMasterEdit(true);
+    try {
+      const res = await fetch('/api/admin/schools-master', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          rbd: editingSchoolRbd,
+          nombreOficial: editNombreOficial.trim(),
+          comuna: editComuna.trim(),
+        }),
+        credentials: 'same-origin',
+      });
+
+      if (res.ok) {
+        setMasterUploadMessage(`Establecimiento RBD ${editingSchoolRbd} actualizado correctamente.`);
+        handleCancelEditMasterSchool();
+        void fetchSchoolsMaster();
+        void fetchPadron(1);
+      } else {
+        const data = (await res.json()) as { message?: string };
+        alert(data.message || 'Error al actualizar el establecimiento.');
+      }
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Error al guardar cambios.');
+    } finally {
+      setSavingMasterEdit(false);
+    }
+  }
+
+  async function handleDeleteMasterSchool(rbd: string, nombreOficial: string) {
+    if (!confirm(`¿Estás seguro de que deseas eliminar el establecimiento "${nombreOficial}" (RBD ${rbd}) del Catálogo Maestro?`)) {
+      return;
+    }
+    try {
+      const res = await fetch(`/api/admin/schools-master?rbd=${encodeURIComponent(rbd)}`, {
+        method: 'DELETE',
+        credentials: 'same-origin',
+      });
+
+      if (res.ok) {
+        setMasterUploadMessage(`Establecimiento RBD ${rbd} eliminado del catálogo.`);
+        void fetchSchoolsMaster();
+        void fetchPadron(1);
+      } else {
+        const data = (await res.json()) as { message?: string };
+        alert(data.message || 'Error al eliminar el establecimiento.');
+      }
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Error al eliminar establecimiento.');
+    }
+  }
+
+  async function handleClearAllSchoolsMaster() {
+    if (!confirm('⚠️ ¿ATENCIÓN: Estás seguro de que deseas ELIMINAR TODOS los establecimientos del Catálogo Maestro? Esta acción vaciará la base teórica completa.')) {
+      return;
+    }
+    setClearingMasterCatalog(true);
+    try {
+      const res = await fetch('/api/admin/schools-master?all=true', {
+        method: 'DELETE',
+        credentials: 'same-origin',
+      });
+
+      if (res.ok) {
+        setMasterUploadMessage('Catálogo maestro vaciado exitosamente.');
+        void fetchSchoolsMaster();
+        void fetchPadron(1);
+      } else {
+        const data = (await res.json()) as { message?: string };
+        alert(data.message || 'Error al vaciar catálogo maestro.');
+      }
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Error al vaciar catálogo.');
+    } finally {
+      setClearingMasterCatalog(false);
+    }
+  }
+
   // Formulario manual Votante
   const [newRutVotante, setNewRutVotante] = useState('');
   const [newRutEstudiante, setNewRutEstudiante] = useState('');
@@ -2673,7 +2772,19 @@ CMD ["npm", "start"]`}
             <div className="space-y-2">
               <div className="flex items-center justify-between text-xs font-bold text-slate-700">
                 <span>Colegios Maestros Registrados ({schoolsMasterRecords.length})</span>
-                {loadingSchoolsMaster && <span className="text-purple-600 animate-pulse">Cargando...</span>}
+                <div className="flex items-center gap-2">
+                  {schoolsMasterRecords.length > 0 && (
+                    <button
+                      type="button"
+                      disabled={clearingMasterCatalog}
+                      onClick={handleClearAllSchoolsMaster}
+                      className="px-2.5 py-1 text-[11px] font-bold text-red-700 bg-red-50 hover:bg-red-100 border border-red-200 rounded-lg transition flex items-center gap-1"
+                    >
+                      {clearingMasterCatalog ? 'Vaciando...' : '🗑️ Vaciar Catálogo Completo'}
+                    </button>
+                  )}
+                  {loadingSchoolsMaster && <span className="text-purple-600 animate-pulse">Cargando...</span>}
+                </div>
               </div>
 
               <div className="max-h-60 overflow-y-auto border border-slate-200 rounded-xl bg-slate-50">
@@ -2688,16 +2799,86 @@ CMD ["npm", "start"]`}
                         <th className="p-2.5">RBD</th>
                         <th className="p-2.5">Nombre Oficial del Establecimiento</th>
                         <th className="p-2.5">Comuna</th>
+                        <th className="p-2.5 text-center w-36">Acciones</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 font-medium">
-                      {schoolsMasterRecords.map((sch) => (
-                        <tr key={sch.rbd} className="hover:bg-white transition">
-                          <td className="p-2.5 font-mono font-bold text-purple-900">{sch.rbd}</td>
-                          <td className="p-2.5 font-semibold text-slate-900">{sch.nombreOficial}</td>
-                          <td className="p-2.5 text-slate-600">{sch.comuna || '—'}</td>
-                        </tr>
-                      ))}
+                      {schoolsMasterRecords.map((sch) => {
+                        const isEditing = editingSchoolRbd === sch.rbd;
+                        return (
+                          <tr key={sch.rbd} className="hover:bg-white transition">
+                            <td className="p-2.5 font-mono font-bold text-purple-900">{sch.rbd}</td>
+                            <td className="p-2.5">
+                              {isEditing ? (
+                                <input
+                                  type="text"
+                                  className="w-full h-8 px-2 text-xs font-semibold rounded-lg border border-purple-300 focus:outline-none focus:border-purple-600 bg-white"
+                                  value={editNombreOficial}
+                                  onChange={(e) => setEditNombreOficial(e.target.value)}
+                                  placeholder="Nombre Oficial del colegio"
+                                />
+                              ) : (
+                                <span className="font-semibold text-slate-900">{sch.nombreOficial}</span>
+                              )}
+                            </td>
+                            <td className="p-2.5 text-slate-600">
+                              {isEditing ? (
+                                <input
+                                  type="text"
+                                  className="w-full h-8 px-2 text-xs rounded-lg border border-purple-300 focus:outline-none focus:border-purple-600 bg-white"
+                                  value={editComuna}
+                                  onChange={(e) => setEditComuna(e.target.value)}
+                                  placeholder="Comuna"
+                                />
+                              ) : (
+                                sch.comuna || '—'
+                              )}
+                            </td>
+                            <td className="p-2.5 text-center">
+                              {isEditing ? (
+                                <div className="flex items-center justify-center gap-1">
+                                  <button
+                                    type="button"
+                                    disabled={savingMasterEdit}
+                                    onClick={handleSaveEditMasterSchool}
+                                    className="p-1 px-2 text-[10px] font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 rounded-md transition"
+                                    title="Guardar Cambios"
+                                  >
+                                    💾 Guardar
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={handleCancelEditMasterSchool}
+                                    className="p-1 px-1.5 text-[10px] font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 border border-slate-300 rounded-md transition"
+                                    title="Cancelar Edición"
+                                  >
+                                    ❌
+                                  </button>
+                                </div>
+                              ) : (
+                                <div className="flex items-center justify-center gap-1.5">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleStartEditMasterSchool(sch)}
+                                    className="p-1 px-2 text-[11px] font-semibold text-purple-700 hover:bg-purple-50 rounded-lg border border-purple-200 transition"
+                                    title="Editar colegio maestro"
+                                  >
+                                    ✏️ Editar
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeleteMasterSchool(sch.rbd, sch.nombreOficial)}
+                                    className="p-1 px-2 text-[11px] font-semibold text-red-600 hover:bg-red-50 rounded-lg border border-red-200 transition"
+                                    title="Eliminar colegio maestro"
+                                  >
+                                    🗑️
+                                  </button>
+                                </div>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 )}
