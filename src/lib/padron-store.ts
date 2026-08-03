@@ -747,7 +747,7 @@ export async function clearPadronStoreAsync(): Promise<void> {
     const { error } = await supabaseAdmin
       .from('bd_padron')
       .delete()
-      .neq('id', '00000000-0000-0000-0000-000000000000');
+      .neq('rut_votante', '');
 
     if (error) {
       console.error('[SUPABASE] Error al vaciar bd_padron:', error.message);

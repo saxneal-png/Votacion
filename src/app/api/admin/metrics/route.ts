@@ -2,10 +2,10 @@ import { cookies } from 'next/headers';
 import { type NextRequest, NextResponse } from 'next/server';
 
 import { getCandidatosAsync, getEstamentoVariants } from '@/lib/candidates-store';
-import { getPadronRecordsAsync } from '@/lib/padron-store';
+import { getAllSchoolsAsync, getPadronRecordsAsync } from '@/lib/padron-store';
+import { getSchoolsMasterAsync } from '@/lib/schools-master-store';
 import { getVotingRecordsAsync } from '@/lib/voting-record-store';
 import { getSchoolsVoted, getVoteTalliesAsync } from '@/lib/metrics-store';
-import { SCHOOLS } from '@/lib/schools-data';
 import {
   ADMIN_SESSION_COOKIE,
   addAuditEntry,
@@ -80,15 +80,6 @@ export async function GET(request: NextRequest) {
       else if (vars.includes('apoderados')) padron.apoderados++;
       else if (vars.includes('estudiantes')) padron.estudiantes++;
     });
-  } else {
-    // Fallback a SCHOOLS
-    SCHOOLS.forEach((s) => {
-      padron.directivos += s.voters.directivos;
-      padron.docentes += s.voters.docentes;
-      padron.asistentes += s.voters.asistentes;
-      padron.apoderados += s.voters.apoderados;
-    });
-    padron.total = padron.directivos + padron.docentes + padron.asistentes + padron.apoderados;
   }
 
   // ── Votos totales emitidos por estamento (desde acta oficial) ────────────
@@ -143,14 +134,43 @@ export async function GET(request: NextRequest) {
     };
   });
 
-  // ── Schools ──────────────────────────────────────────────────────────────
-  const schools: SchoolResult[] = SCHOOLS.map((s) => {
-    const votedSet = schoolsVotedMap.get(s.id);
+  // ── Escuelas Reales del Padrón y Catálogo Maestro ────────────────────────
+  const realSchoolsList = await getAllSchoolsAsync();
+  const masterSchoolsList = await getSchoolsMasterAsync();
+
+  const realSchoolsMap = new Map<string, { rbd: string; name: string }>();
+  realSchoolsList.forEach((s) => realSchoolsMap.set(s.rbd, { rbd: s.rbd, name: s.nombre }));
+  masterSchoolsList.forEach((s) => {
+    if (!realSchoolsMap.has(s.rbd)) {
+      realSchoolsMap.set(s.rbd, { rbd: s.rbd, name: s.nombreOficial });
+    }
+  });
+
+  const schools: SchoolResult[] = Array.from(realSchoolsMap.values()).map((s) => {
+    const votedSet = schoolsVotedMap.get(s.rbd);
+
+    const schoolPadron = {
+      directivos: 0,
+      docentes: 0,
+      asistentes: 0,
+      apoderados: 0,
+    };
+
+    padronRecords.forEach((p) => {
+      if (p.rbdEstablecimiento === s.rbd) {
+        const vars = getEstamentoVariants(p.estamento).map((v) => v.toLowerCase());
+        if (vars.includes('directivos')) schoolPadron.directivos++;
+        else if (vars.includes('docentes')) schoolPadron.docentes++;
+        else if (vars.includes('asistentes')) schoolPadron.asistentes++;
+        else if (vars.includes('apoderados')) schoolPadron.apoderados++;
+      }
+    });
+
     return {
-      id: s.id,
+      id: s.rbd,
       name: s.name,
-      shortName: s.shortName,
-      padron: s.voters,
+      shortName: s.name,
+      padron: schoolPadron,
       voted: {
         directivos: votedSet?.has('directivos') ?? false,
         docentes: votedSet?.has('docentes') ?? false,
