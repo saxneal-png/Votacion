@@ -123,24 +123,27 @@ export async function saveElectionConfigAsync(config: Partial<ElectionConfig>): 
   globalThis.__electionConfigStore = updated;
 
   if (supabaseAdmin) {
-    void supabaseAdmin
-      .from('bd_configuracion_eleccion')
-      .upsert({
-        id: 'config_principal',
-        titulo_proceso: updated.tituloProceso,
-        estamentos_habilitados: updated.estamentosHabilitados,
-        fecha_inicio: updated.fechaInicio,
-        fecha_fin: updated.fechaFin,
-        estado_eleccion: updated.estadoEleccion,
-        updated_at: updated.updatedAt,
-      }, { onConflict: 'id' })
-      .then(({ error }) => {
-        if (error) {
-          console.error('[SUPABASE] Error al guardar bd_configuracion_eleccion:', error.message);
-        } else {
-          console.log('[SUPABASE] Configuración electoral guardada en Supabase.');
-        }
-      });
+    try {
+      const { error } = await supabaseAdmin
+        .from('bd_configuracion_eleccion')
+        .upsert({
+          id: 'config_principal',
+          titulo_proceso: updated.tituloProceso,
+          estamentos_habilitados: updated.estamentosHabilitados,
+          fecha_inicio: updated.fechaInicio,
+          fecha_fin: updated.fechaFin,
+          estado_eleccion: updated.estadoEleccion,
+          updated_at: updated.updatedAt,
+        }, { onConflict: 'id' });
+
+      if (error) {
+        console.error('[SUPABASE] Error al guardar bd_configuracion_eleccion:', error.message);
+      } else {
+        console.log('[SUPABASE] Configuración electoral guardada en Supabase.');
+      }
+    } catch (err) {
+      console.error('[SUPABASE] Excepción al guardar bd_configuracion_eleccion:', err);
+    }
   }
 
   return updated;

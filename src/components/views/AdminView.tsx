@@ -1977,10 +1977,31 @@ az webapp config appsettings set --resource-group rg-slep-elecciones --name vota
         )}
 
         {/* ==================================================================== */}
-        {/* PESTAÑA 3: MÉTRICAS Y PARTICIPACIÓN ELECTORAL                        */}
+        {/* PESTAÑA 4: MÉTRICAS Y PARTICIPACIÓN ELECTORAL                        */}
         {/* ==================================================================== */}
         {activeTab === 'metrics' && (
           <div className="space-y-6">
+            {/* Header del módulo de métricas */}
+            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-wrap items-center justify-between gap-4">
+              <div>
+                <h2 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
+                  <span>📊 Resultados y Métricas de Participación Electoral</span>
+                </h2>
+                <p className="text-xs text-slate-500 m-0 mt-0.5 font-medium">
+                  Resultados en tiempo real del escrutinio por candidato, participación por estamento y cobertura por colegio.
+                </p>
+              </div>
+
+              <a
+                href="/api/admin/export-metrics-csv"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-purple-700 hover:bg-purple-800 text-white text-xs font-extrabold shadow-md transition"
+              >
+                <span>📥</span> Exportar Métricas y Resultados (CSV / Excel)
+              </a>
+            </div>
+
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
               <SummaryCard
                 label="Padrón Total Habilitado"
