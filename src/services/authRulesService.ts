@@ -6,7 +6,7 @@ import {
   getPadronRecords,
   PadronRecord,
 } from '@/lib/padron-store';
-import { getMockUserByRut } from '@/lib/mock-api';
+
 
 export interface TempTokenPayload {
   token: string;
@@ -208,27 +208,7 @@ export function validateFuncionarioAuth(rutFuncionario: string, email: string): 
       cleanRut(r.rutVotante) === cleanRutStr,
   );
 
-  if (!funcionarioRecord) {
-    // Buscar en usuarios conocidos de prueba (mockUsers)
-    const mockUser = getMockUserByRut(valFuncionario.formattedRut);
-    if (mockUser && ['docentes', 'asistentes', 'directivos'].includes(mockUser.estamento.toLowerCase())) {
-      funcionarioRecord = {
-        id: `func-mock-${mockUser.rut}`,
-        rutVotante: mockUser.rut,
-        formattedRutVotante: mockUser.rut,
-        rutEstudianteAsociado: null,
-        formattedRutEstudiante: null,
-        nombreCompleto: mockUser.fullName,
-        estamento: mockUser.estamento.toUpperCase() as EstamentoDecreto102,
-        rbdEstablecimiento: '10202',
-        nombreEstablecimiento: mockUser.organization || 'Establecimiento SLEP',
-        habilitado: true,
-        haVotado: false,
-        fechaVoto: null,
-        createdAt: new Date().toISOString(),
-      };
-    }
-  }
+
 
   if (!funcionarioRecord) {
     throw new Error(
@@ -276,27 +256,7 @@ export async function validateFuncionarioAuthAsync(
 
   let funcionarioRecord = await findFuncionarioRecordAsync(rutFuncionario);
 
-  if (!funcionarioRecord) {
-    // Buscar en usuarios conocidos de prueba (mockUsers)
-    const mockUser = getMockUserByRut(valFuncionario.formattedRut);
-    if (mockUser && ['docentes', 'asistentes', 'directivos'].includes(mockUser.estamento.toLowerCase())) {
-      funcionarioRecord = {
-        id: `func-mock-${mockUser.rut}`,
-        rutVotante: mockUser.rut,
-        formattedRutVotante: mockUser.rut,
-        rutEstudianteAsociado: null,
-        formattedRutEstudiante: null,
-        nombreCompleto: mockUser.fullName,
-        estamento: mockUser.estamento.toUpperCase() as EstamentoDecreto102,
-        rbdEstablecimiento: '10202',
-        nombreEstablecimiento: mockUser.organization || 'Establecimiento SLEP',
-        habilitado: true,
-        haVotado: false,
-        fechaVoto: null,
-        createdAt: new Date().toISOString(),
-      };
-    }
-  }
+
 
   if (!funcionarioRecord) {
     throw new Error(
@@ -404,22 +364,7 @@ export function consumeTempToken(
     }
   }
 
-  // Soporte para tokens demo simulados estáticos
-  if (!stored && cleanTok === 'slep-token-demo-static') {
-    return {
-      valid: true,
-      payload: {
-        token: cleanTok,
-        rutVotante: '16940271-k',
-        nombreVotante: 'María González Pérez',
-        estamentoDestino: 'DOCENTES',
-        rbdEstablecimiento: '10202',
-        nombreEstablecimiento: 'Escuela Martín Prado',
-        emailDestino: 'docente@eduvallediguillin.gob.cl',
-        expiresAt: Date.now() + 600000,
-      },
-    };
-  }
+
 
   if (!stored) {
     return { valid: false, reason: 'El Enlace Mágico es inválido o ya fue utilizado anteriormente.' };

@@ -1,8 +1,7 @@
 import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
 
-import { getCandidateById, submitVote } from '@/lib/mock-api';
-import { getEstamentoVariants } from '@/lib/candidates-store';
+import { getCandidatoByIdAsync, getEstamentoVariants } from '@/lib/candidates-store';
 import { recordVote } from '@/lib/metrics-store';
 import { recordOfficialVote } from '@/lib/voting-record-store';
 import { recordVoteInSupabase } from '@/lib/supabase-client';
@@ -65,7 +64,8 @@ export async function POST(request: Request) {
       );
     }
 
-    const candidate = await getCandidateById(candidateId);
+    // Buscar el candidato en Supabase (sin fallback a mock)
+    const candidate = await getCandidatoByIdAsync(candidateId);
     if (!candidate) {
       return NextResponse.json(
         { message: 'La candidatura seleccionada no fue encontrada.' },
@@ -87,8 +87,8 @@ export async function POST(request: Request) {
       );
     }
 
-    // Atomic check + mark local session:
-    if (hasUserVoted(userRut)) {
+    // Atomic check + mark local session (clave compuesta rut:estamento para multirrol):
+    if (hasUserVoted(userRut, userEstamento)) {
       return NextResponse.json(
         { message: 'Ya has emitido tu voto en esta eleccion.' },
         { status: 409 },
@@ -109,7 +109,7 @@ export async function POST(request: Request) {
     } catch (supabaseError) {
       const code = (supabaseError as Record<string, unknown>)?.code;
       if (code === 'ALREADY_VOTED') {
-        markUserAsVoted(userRut);
+        markUserAsVoted(userRut, userEstamento);
         return NextResponse.json(
           { message: 'Ya has emitido tu voto en esta eleccion.' },
           { status: 409 },
@@ -124,7 +124,7 @@ export async function POST(request: Request) {
       throw supabaseError;
     }
 
-    markUserAsVoted(userRut);
+    markUserAsVoted(userRut, userEstamento);
     recordVote(candidateId, userEstamento, userRbd);
 
     // Registrar en el acta oficial local con el email y datos reales del votante
@@ -137,12 +137,13 @@ export async function POST(request: Request) {
       skipSupabaseInsert: true,
     });
 
-    const result = await submitVote(candidateId);
+    const candidateName = candidate.nombreCompleto || candidate.name || candidateId;
 
     // Destroy the session immediately after voting
     destroySession(sessionId);
     const response = NextResponse.json({
-      ...result,
+      success: true,
+      message: `Voto emitido correctamente para ${candidateName}.`,
       receiptCode: voteResult.receiptCode || voteResult.comprobanteId,
       folio: voteResult.folio || voteResult.comprobanteId,
       voterName: userFullName,

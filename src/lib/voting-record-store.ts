@@ -30,33 +30,8 @@ declare global {
 const votingRecords: VotingRecordEntry[] =
   globalThis.__votingRecordStore ?? (globalThis.__votingRecordStore = []);
 
-// Registros de demostración iniciales
-if (votingRecords.length === 0) {
-  votingRecords.push(
-    {
-      folio: 'FOL-2026-00001-A9B2',
-      rutVotante: '16940271K',
-      formattedRutVotante: '16.940.271-K',
-      emailRegistrado: 'maria.gonzalez@eduvallediguillin.gob.cl',
-      fechaHora: new Date(Date.now() - 3600000).toISOString(),
-      fechaHoraFormateada: formatChileDateTime(Date.now() - 3600000),
-      estamento: 'DOCENTES',
-      rbdEstablecimiento: '10202',
-      nombreEstablecimiento: 'Escuela Martín Prado',
-    },
-    {
-      folio: 'FOL-2026-00002-C4D8',
-      rutVotante: '145678901',
-      formattedRutVotante: '14.567.890-1',
-      emailRegistrado: 'apoderado.prueba@gmail.com',
-      fechaHora: new Date(Date.now() - 1800000).toISOString(),
-      fechaHoraFormateada: formatChileDateTime(Date.now() - 1800000),
-      estamento: 'PADRES_APODERADOS',
-      rbdEstablecimiento: '10202',
-      nombreEstablecimiento: 'Escuela Martín Prado',
-    },
-  );
-}
+
+
 
 /**
  * Registrar el sufragio emitido en el acta de votación con folio único

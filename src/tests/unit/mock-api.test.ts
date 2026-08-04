@@ -36,19 +36,16 @@ describe('mock-api — verifyOtpCode', () => {
 });
 
 describe('mock-api — submitVote', () => {
-  it('devuelve receiptCode y candidate para un candidato válido', async () => {
-    const result = await submitVote('marisol-huerta');
-    expect(result.receiptCode).toMatch(/^SLEP-MH-/);
-    expect(result.candidate.name).toBe('Marisol Huerta');
+  it('lanza error para un candidateId inexistente (sin candidatos mock)', async () => {
+    // Los candidatos mock fueron eliminados. submitVote falla si el candidato no existe en el store.
+    await expect(submitVote('marisol-huerta')).rejects.toThrow();
   });
 
-  it('receiptCode no contiene timestamp (formato UUID fragmento)', async () => {
-    const result = await submitVote('marisol-huerta');
-    const suffix = result.receiptCode.split('-').pop() ?? '';
-    expect(suffix).toMatch(/^[0-9A-F]{8}$/);
+  it('lanza error para cualquier candidateId cuando el store está vacío', async () => {
+    await expect(submitVote('candidato-inexistente')).rejects.toThrow();
   });
 
-  it('lanza error para un candidateId inexistente', async () => {
+  it('lanza error para un candidateId explícitamente inválido', async () => {
     await expect(submitVote('candidato-inexistente')).rejects.toThrow();
   });
 });

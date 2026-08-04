@@ -119,12 +119,22 @@ export function destroySession(sessionId: string | undefined) {
   sessionStore.delete(sessionId);
 }
 
-export function hasUserVoted(userRut: string) {
-  return votedUsers.has(userRut);
+/**
+ * Verifica si el votante ya emitió su voto para un estamento concreto.
+ * La clave compuesta "{rut}:{estamento}" permite que un usuario con doble rol
+ * (ej. Docente + Apoderado) pueda sufragar en cada estamento de forma independiente.
+ */
+export function hasUserVoted(userRut: string, userEstamento: string = '') {
+  const key = userEstamento ? `${userRut}:${userEstamento.toLowerCase()}` : userRut;
+  return votedUsers.has(key);
 }
 
-export function markUserAsVoted(userRut: string) {
-  votedUsers.add(userRut);
+/**
+ * Marca el voto del votante para el estamento concreto.
+ */
+export function markUserAsVoted(userRut: string, userEstamento: string = '') {
+  const key = userEstamento ? `${userRut}:${userEstamento.toLowerCase()}` : userRut;
+  votedUsers.add(key);
 }
 
 export function clearVotedUsers() {

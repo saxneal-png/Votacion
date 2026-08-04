@@ -8,18 +8,33 @@ import {
 } from '@/lib/candidates-store';
 
 describe('candidates-store', () => {
-  it('obtiene la lista inicial de candidatos', () => {
+  it('inicia con store vacío (candidatos gestionados desde Supabase)', () => {
     const list = getCandidatos();
-    expect(list.length).toBeGreaterThan(0);
+    // El store ya no contiene candidatos hardcodeados.
+    // En producción, getCandidatosAsync() los trae desde Supabase.
+    expect(Array.isArray(list)).toBe(true);
   });
 
-  it('filtra candidatos por estamento y por texto de búsqueda', () => {
+  it('filtra candidatos por estamento a partir de candidatos agregados dinámicamente', () => {
+    // Agregar un candidato temporal para verificar el filtro
+    const temp = addCandidato({
+      nombreCompleto: 'Juan Pérez Rojas',
+      estamento: 'docentes',
+      biografia: 'Docente de historia',
+      propuestaPrincipal: 'Mejorar planificación curricular',
+      escuelaEstablecimiento: 'Liceo Bicentenario',
+    });
+
     const docentes = getCandidatos({ estamento: 'docentes' });
+    expect(docentes.some((c) => c.id === temp.id)).toBe(true);
     expect(docentes.every((c) => c.estamento === 'docentes')).toBe(true);
 
-    const searchResult = getCandidatos({ search: 'Pablo Reyes' });
+    const searchResult = getCandidatos({ search: 'Juan Pérez' });
     expect(searchResult.length).toBeGreaterThanOrEqual(1);
-    expect(searchResult[0].name).toContain('Pablo Reyes');
+    expect(searchResult[0].nombreCompleto).toContain('Juan Pérez');
+
+    // Limpiar
+    deleteCandidato(temp.id);
   });
 
   it('agrega un nuevo candidato con campos completos y foto de perfil', () => {

@@ -19,161 +19,14 @@ export interface CandidateFormData {
   fotoPerfil?: string;
 }
 
-const INITIAL_CANDIDATES: Candidate[] = [
-  // ── Directivos ────────────────────────────────────────────────────────────
-  {
-    id: 'pablo-reyes',
-    name: 'Pablo Reyes',
-    nombreCompleto: 'Pablo Reyes Castro',
-    role: 'Director Escuela Zona Norte',
-    slogan: 'Liderazgo pedagógico centrado en resultados colectivos.',
-    initials: 'PR',
-    accentColor: '#1a4a7a',
-    estamento: 'directivos',
-    biografia: 'Profesor de Estado con más de 15 años de experiencia directiva en el sistema público. Especialista en gestión de equipos de alto rendimiento.',
-    propuestaPrincipal: 'Implementar un plan de fortalecimiento de liderazgo directivo participativo y transparencia en el Consejo Local.',
-    escuelaEstablecimiento: 'Liceo Roberto Humeres Noble',
-    fotoPerfil: 'https://images.unsplash.com/photo-1560250097-0b93528c311a?w=150&auto=format&fit=crop&q=80',
-  },
-  {
-    id: 'claudia-fuentes',
-    name: 'Claudia Fuentes',
-    nombreCompleto: 'Claudia Fuentes Morales',
-    role: 'Directora Escuela Zona Sur',
-    slogan: 'Gestión participativa para comunidades escolares fuertes.',
-    initials: 'CF',
-    accentColor: '#4a1a5a',
-    estamento: 'directivos',
-    biografia: 'Magíster en Educación con mención en Gestión Escolar. Ha liderado proyectos de convivencia escolar y vinculación territorial en SLEP.',
-    propuestaPrincipal: 'Crear redes comunitarias entre establecimientos para compartir buenas prácticas pedagógicas y recursos de infraestructura.',
-    escuelaEstablecimiento: 'Escuela Martín Prado',
-    fotoPerfil: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150&auto=format&fit=crop&q=80',
-  },
-  {
-    id: 'rodrigo-espinoza',
-    name: 'Rodrigo Espinoza',
-    nombreCompleto: 'Rodrigo Espinoza Silva',
-    role: 'Jefe UTP',
-    slogan: 'Innovación curricular con base en evidencia educativa.',
-    initials: 'RE',
-    accentColor: '#1a5a3a',
-    estamento: 'directivos',
-    biografia: 'Docente e Investigador Pedagógico. Enfocado en la transformación digital de las aulas rurales e inclusión tecnológica.',
-    propuestaPrincipal: 'Priorizar el presupuesto para conectividad digital e equipamiento tecnológico de vanguardia en todas las salas de clases.',
-    escuelaEstablecimiento: 'Colegio República de Costa Rica',
-    fotoPerfil: 'https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?w=150&auto=format&fit=crop&q=80',
-  },
-  // ── Docentes ─────────────────────────────────────────────────────────────
-  {
-    id: 'marisol-huerta',
-    name: 'Marisol Huerta',
-    nombreCompleto: 'Marisol Huerta Sepúlveda',
-    role: 'Docente Educación Básica',
-    slogan: 'Participación informada con foco en continuidad pedagógica.',
-    initials: 'MH',
-    accentColor: '#8c4f2f',
-    estamento: 'docentes',
-    biografia: 'Profesora de Educación General Básica con 12 años en el aula pública. Defensora del bienestar emocional del cuerpo docente.',
-    propuestaPrincipal: 'Resguardar las horas no lectivas para planificación colaborativa y reducir la sobrecarga administrativa.',
-    escuelaEstablecimiento: 'Escuela Martín Prado',
-    fotoPerfil: 'https://images.unsplash.com/photo-1580894732413-80642a6b329c?w=150&auto=format&fit=crop&q=80',
-  },
-  {
-    id: 'vianka-mejias',
-    name: 'Vianka Mejías',
-    nombreCompleto: 'Vianka Mejías Araya',
-    role: 'Docente de Matemáticas',
-    slogan: 'Cuidado docente y mejores condiciones para el aprendizaje.',
-    initials: 'VM',
-    accentColor: '#2b5f7e',
-    estamento: 'docentes',
-    biografia: 'Licenciada en Educación con especialización en resolución de problemas y metodologías STEM para escuelas públicas.',
-    propuestaPrincipal: 'Impulsar laboratorios interactivos de ciencias y apoyo especializado para estudiantes con necesidades educativas especiales.',
-    escuelaEstablecimiento: 'Liceo Bicentenario',
-    fotoPerfil: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150&auto=format&fit=crop&q=80',
-  },
-  // ── Asistentes ────────────────────────────────────────────────────────────
-  {
-    id: 'roberto-lara',
-    name: 'Roberto Lara',
-    nombreCompleto: 'Roberto Lara Valenzuela',
-    role: 'Inspector General',
-    slogan: 'Reconocimiento y dignidad para la labor de asistentes.',
-    initials: 'RL',
-    accentColor: '#6f3b89',
-    estamento: 'asistentes',
-    biografia: 'Asistente de la Educación con 18 años de trayectoria en inspectoría y contención escolar en la educación pública.',
-    propuestaPrincipal: 'Capacitación continua en primeros auxilios psicológicos y equiparación de asignaciones para asistentes.',
-    escuelaEstablecimiento: 'Colegio República de Costa Rica',
-    fotoPerfil: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80',
-  },
-  {
-    id: 'carolina-tapia',
-    name: 'Carolina Tapia',
-    nombreCompleto: 'Carolina Tapia Godoy',
-    role: 'Psicopedagoga',
-    slogan: 'Comunidad escolar integrada con valor en cada rol.',
-    initials: 'CT',
-    accentColor: '#366d48',
-    estamento: 'asistentes',
-    biografia: 'Profesional PIE enfocada en diagnóstico e intervención socioemocional integral para comunidades vulnerables.',
-    propuestaPrincipal: 'Crear duplas psicosociales permanentes en todos los colegios de la comuna para contención de crisis.',
-    escuelaEstablecimiento: 'Escuela Martín Prado',
-    fotoPerfil: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
-  },
-  // ── Apoderados ───────────────────────────────────────────────────────────
-  {
-    id: 'felipe-alvarez',
-    name: 'Felipe Álvarez',
-    nombreCompleto: 'Felipe Álvarez Orellana',
-    role: 'Presidente Centro de Padres',
-    slogan: 'Voz activa para las familias en las decisiones del servicio.',
-    initials: 'FA',
-    accentColor: '#b05d25',
-    estamento: 'apoderados',
-    biografia: 'Apoderado comprometido con la fiscalización transparente de recursos y mejora del servicio de alimentación de JUNAEB.',
-    propuestaPrincipal: 'Auditorías participativas semestrales y mejor calidad en la alimentación e infraestructura escolar.',
-    escuelaEstablecimiento: 'Escuela Martín Prado',
-    fotoPerfil: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&auto=format&fit=crop&q=80',
-  },
-  {
-    id: 'daniela-salinas',
-    name: 'Daniela Salinas',
-    nombreCompleto: 'Daniela Salinas Palma',
-    role: 'Representante Apoderados',
-    slogan: 'Transparencia, infraestructura y bienestar estudiantil.',
-    initials: 'DS',
-    accentColor: '#20635b',
-    estamento: 'apoderados',
-    biografia: 'Madre y dirigente vecinal con amplia vocación comunitaria y defensa del transporte escolar rural.',
-    propuestaPrincipal: 'Garantizar rutas de transporte escolar rural gratuitas y climatización en salas para invierno y verano.',
-    escuelaEstablecimiento: 'Liceo Roberto Humeres Noble',
-    fotoPerfil: 'https://images.unsplash.com/photo-1573497019940-1c28c88b4f3e?w=150&auto=format&fit=crop&q=80',
-  },
-  // ── Estudiantes ───────────────────────────────────────────────────────────
-  {
-    id: 'ignacio-paredes',
-    name: 'Ignacio Paredes',
-    nombreCompleto: 'Ignacio Paredes Soto',
-    role: 'Presidente Centro de Estudiantes',
-    slogan: 'Voz juvenil, espacios recreativos y participación democrática real.',
-    initials: 'IP',
-    accentColor: '#0284c7',
-    estamento: 'estudiantes',
-    biografia: 'Estudiante de Enseñanza Media y líder estudiantil en actividades deportivas, culturales y medioambientales.',
-    propuestaPrincipal: 'Crear presupuestos participativos estudiantiles para financiar torneos deportivos y talleres culturales inter-escolares.',
-    escuelaEstablecimiento: 'Liceo Bicentenario',
-    fotoPerfil: 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=150&auto=format&fit=crop&q=80',
-  },
-];
-
 declare global {
   // eslint-disable-next-line no-var
   var __candidatesStore: Candidate[] | undefined;
 }
 
 const candidatesStore: Candidate[] =
-  globalThis.__candidatesStore ?? (globalThis.__candidatesStore = INITIAL_CANDIDATES);
+  globalThis.__candidatesStore ?? (globalThis.__candidatesStore = []);
+
 
 function getInitials(fullName: string): string {
   const parts = fullName.trim().split(/\s+/);
@@ -273,7 +126,8 @@ export async function getCandidatoByIdAsync(id: string): Promise<Candidate | und
     console.error('[SUPABASE] Excepción al buscar candidato por ID:', err);
   }
 
-  return getCandidatoById(id);
+  // Sin datos en Supabase → undefined (sin fallback a mocks)
+  return undefined;
 }
 
 /**
@@ -407,7 +261,8 @@ export async function getCandidatosAsync({
     const cachedData = await getCachedCandidatesFromSupabase();
 
     if (!cachedData || cachedData.length === 0) {
-      return getCandidatos({ estamento, search });
+      // Sin datos en Supabase → estado limpio (sin mocks)
+      return [];
     }
 
     let results = cachedData.map((item) => mapRowToCandidate(item as Record<string, unknown>));
