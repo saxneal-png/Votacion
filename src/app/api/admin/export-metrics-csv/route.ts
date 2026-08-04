@@ -2,7 +2,7 @@ import { cookies } from 'next/headers';
 import { type NextRequest, NextResponse } from 'next/server';
 
 import { getCandidatos, getCandidatosAsync, getEstamentoVariants } from '@/lib/candidates-store';
-import { getAllSchoolsAsync, getPadronRecords, getPadronRecordsAsync, type PadronRecord } from '@/lib/padron-store';
+import { getAllPadronRecordsAsync, getAllSchoolsAsync, getPadronRecords, type PadronRecord } from '@/lib/padron-store';
 import { getSchoolsMasterAsync } from '@/lib/schools-master-store';
 import { getVotingRecords, getVotingRecordsAsync, type VotingRecordEntry } from '@/lib/voting-record-store';
 import { getSchoolsVoted, getVoteTalliesAsync } from '@/lib/metrics-store';
@@ -77,7 +77,7 @@ export async function GET(request: NextRequest) {
     let padronRecords: PadronRecord[] = [];
     let totalPadronCount = 0;
     try {
-      const res = await getPadronRecordsAsync({ pageSize: 100000 }).catch(() => null);
+      const res = await getAllPadronRecordsAsync().catch(() => null);
       if (res) {
         padronRecords = res.records;
         totalPadronCount = res.total;

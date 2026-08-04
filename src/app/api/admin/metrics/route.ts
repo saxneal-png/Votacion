@@ -2,7 +2,7 @@ import { cookies } from 'next/headers';
 import { type NextRequest, NextResponse } from 'next/server';
 
 import { getCandidatosAsync, getEstamentoVariants } from '@/lib/candidates-store';
-import { getAllSchoolsAsync, getPadronRecordsAsync } from '@/lib/padron-store';
+import { getAllPadronRecordsAsync, getAllSchoolsAsync } from '@/lib/padron-store';
 import { getSchoolsMasterAsync } from '@/lib/schools-master-store';
 import { getVotingRecordsAsync } from '@/lib/voting-record-store';
 import { getSchoolsVoted, getVoteTalliesAsync } from '@/lib/metrics-store';
@@ -43,11 +43,10 @@ export async function GET(request: NextRequest) {
   // 1. Obtener candidatos actualizados (Supabase / Store)
   const allCandidates = await getCandidatosAsync({ estamento: 'ALL' });
 
-  // 2. Obtener padrón oficial de votantes (Supabase / Store con filtro Multi-Tenant)
-  const { records: padronRecords, total: totalPadronCount } = await getPadronRecordsAsync({
+  // 2. Obtener padrón oficial de votantes sin truncamiento de 1.000 filas (Paginación por lotes)
+  const { records: padronRecords, total: totalPadronCount } = await getAllPadronRecordsAsync({
     rbd: schoolId,
     slepId,
-    pageSize: 100000,
   });
 
   // 3. Obtener actas oficiales de voto (Supabase / Store)

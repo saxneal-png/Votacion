@@ -1,7 +1,7 @@
 import * as XLSX from 'xlsx';
 import { cleanAndValidateRUT, formatRut } from '@/lib/rut-validator';
 import { supabaseAdmin } from '@/lib/supabase-client';
-import { getSchoolsMasterMapAsync, SchoolMasterRecord } from '@/lib/schools-master-store';
+import { getSchoolsMasterAsync, getSchoolsMasterMapAsync, SchoolMasterRecord } from '@/lib/schools-master-store';
 
 export type EstamentoDecreto102 =
   | 'ESTUDIANTES'
@@ -164,34 +164,7 @@ export function getAvailableSchools(records: PadronRecord[] = padronStore): Scho
   return Array.from(map.entries()).map(([rbd, nombre]) => ({ rbd, nombre }));
 }
 
-/**
- * Obtiene la lista completa de todos los establecimientos reales únicos presentes en bd_padron (Supabase)
- */
-export async function getAllSchoolsAsync(): Promise<SchoolFilterOption[]> {
-  try {
-    const { data, error } = await supabaseAdmin
-      .from('bd_padron')
-      .select('rbd_establecimiento, nombre_establecimiento');
 
-    if (error || !data || data.length === 0) {
-      return getAvailableSchools(padronStore);
-    }
-
-    const map = new Map<string, string>();
-    data.forEach((item: Record<string, unknown>) => {
-      const rbd = String(item.rbd_establecimiento || '').trim();
-      const nombre = String(item.nombre_establecimiento || '').trim();
-      if (rbd && nombre) {
-        map.set(rbd, nombre);
-      }
-    });
-
-    return Array.from(map.entries()).map(([rbd, nombre]) => ({ rbd, nombre }));
-  } catch (err) {
-    console.error('[SUPABASE] Error obteniendo lista de establecimientos:', err);
-    return getAvailableSchools(padronStore);
-  }
-}
 
 /**
  * Obtiene el padrón completo con opciones de filtrado y búsqueda
@@ -789,6 +762,166 @@ function mapRowToPadronRecord(item: Record<string, unknown>): PadronRecord {
 }
 
 /**
+ * Obtiene la lista completa de todos los establecimientos reales únicos presentes en bd_establecimientos_maestro y bd_padron (Supabase)
+ */
+export async function getAllSchoolsAsync(): Promise<SchoolFilterOption[]> {
+  const map = new Map<string, string>();
+
+  // 1. Obtener establecimientos del Catálogo Maestro (que contiene los 131 colegios base)
+  try {
+    const masterSchools = await getSchoolsMasterAsync();
+    masterSchools.forEach((s) => {
+      const rbd = String(s.rbd || '').trim();
+      const nombre = String(s.nombreOficial || '').trim();
+      if (rbd && nombre) {
+        map.set(rbd, nombre);
+      }
+    });
+  } catch (err) {
+    console.error('[SUPABASE] Error obteniendo catálogo maestro en getAllSchoolsAsync:', err);
+  }
+
+  // 2. Si ya tenemos colegios desde el catálogo maestro, hacer 1 sola consulta rápida a bd_padron para capturar eventuales excepciones
+  // Si no hay catálogo maestro cargado, iterar hasta un máximo de 5 lotes (5.000 filas) para no penalizar tiempos de respuesta.
+  if (supabaseAdmin) {
+    try {
+      const maxPages = map.size > 0 ? 1 : 5;
+      const pageSize = 1000;
+
+      for (let page = 0; page < maxPages; page++) {
+        const from = page * pageSize;
+        const to = from + pageSize - 1;
+
+        const { data, error } = await supabaseAdmin
+          .from('bd_padron')
+          .select('rbd_establecimiento, nombre_establecimiento')
+          .range(from, to);
+
+        if (error || !data || data.length === 0) {
+          break;
+        }
+
+        data.forEach((item: Record<string, unknown>) => {
+          const rbd = String(item.rbd_establecimiento || '').trim();
+          const nombre = String(item.nombre_establecimiento || '').trim();
+          if (rbd && nombre) {
+            map.set(rbd, nombre);
+          }
+        });
+
+        if (data.length < pageSize) {
+          break;
+        }
+      }
+    } catch (err) {
+      console.error('[SUPABASE] Error obteniendo lista de establecimientos de bd_padron:', err);
+    }
+  }
+
+  // 3. Fallback en memoria local
+  const localSchools = getAvailableSchools(padronStore);
+  localSchools.forEach((s) => {
+    if (s.rbd && s.nombre && !map.has(s.rbd)) {
+      map.set(s.rbd, s.nombre);
+    }
+  });
+
+  return Array.from(map.entries()).map(([rbd, nombre]) => ({ rbd, nombre }));
+}
+
+/**
+ * Obtiene la TOTALIDAD de los registros del padrón desde Supabase realizando paginación interna en lotes de 1.000 filas.
+ * Esto evita la pérdida o truncamiento de registros por el límite max_rows por defecto de PostgREST / Supabase.
+ */
+export async function getAllPadronRecordsAsync({
+  search = '',
+  estamento = '',
+  rbd = '',
+  slepId = '',
+}: {
+  search?: string;
+  estamento?: string;
+  rbd?: string;
+  slepId?: string;
+} = {}): Promise<{
+  records: PadronRecord[];
+  total: number;
+}> {
+  if (!supabaseAdmin) {
+    const local = getPadronRecords({ search, estamento, rbd });
+    return { records: local.records, total: local.records.length };
+  }
+
+  try {
+    const allRecords: PadronRecord[] = [];
+    let page = 0;
+    const BATCH_SIZE = 1000;
+    let totalCount = 0;
+    let hasMore = true;
+
+    while (hasMore) {
+      let query = supabaseAdmin
+        .from('bd_padron')
+        .select('*', { count: 'exact' })
+        .order('nombre_completo', { ascending: true });
+
+      if (slepId && slepId !== 'ALL') {
+        query = query.eq('slep_id', slepId);
+      }
+      if (estamento && estamento !== 'ALL') {
+        query = query.eq('estamento', estamento.toUpperCase());
+      }
+      if (rbd && rbd !== 'ALL') {
+        query = query.eq('rbd_establecimiento', rbd);
+      }
+      if (search) {
+        const q = search.trim();
+        query = query.or(
+          `rut_votante.ilike.%${q}%,nombre_completo.ilike.%${q}%,nombre_establecimiento.ilike.%${q}%`,
+        );
+      }
+
+      const from = page * BATCH_SIZE;
+      const to = from + BATCH_SIZE - 1;
+
+      const { data, count, error } = await query.range(from, to);
+
+      if (error || !data || data.length === 0) {
+        if (page === 0) {
+          if (error) console.error('[SUPABASE] Error en getAllPadronRecordsAsync:', error.message);
+          const local = getPadronRecords({ search, estamento, rbd });
+          return { records: local.records, total: local.records.length };
+        }
+        hasMore = false;
+        break;
+      }
+
+      if (count !== null && count !== undefined) {
+        totalCount = count;
+      }
+
+      const mapped = data.map((item) => mapRowToPadronRecord(item as Record<string, unknown>));
+      allRecords.push(...mapped);
+
+      if (data.length < BATCH_SIZE || (totalCount > 0 && allRecords.length >= totalCount)) {
+        hasMore = false;
+      } else {
+        page++;
+      }
+    }
+
+    return {
+      records: allRecords,
+      total: totalCount || allRecords.length,
+    };
+  } catch (err) {
+    console.error('[SUPABASE] Excepción en getAllPadronRecordsAsync:', err);
+    const local = getPadronRecords({ search, estamento, rbd });
+    return { records: local.records, total: local.records.length };
+  }
+}
+
+/**
  * Obtener el padrón filtrado desde Supabase (o fallback en memoria)
  */
 export async function getPadronRecordsAsync({
@@ -860,12 +993,15 @@ export async function getPadronRecordsAsync({
     const totalPages = Math.ceil(total / pageSize) || 1;
     const allSchools = await getAllSchoolsAsync();
 
+    // Obtener los registros necesarios para el cálculo exacto de quórums a nivel de padrón
+    const { records: quorumRecords } = await getAllPadronRecordsAsync({ search, estamento, rbd, slepId });
+
     return {
       records,
       total,
       totalPages,
       currentPage: page,
-      quorums: calculateEstamentoQuorums(records),
+      quorums: calculateEstamentoQuorums(quorumRecords.length > 0 ? quorumRecords : records),
       schools: allSchools,
     };
   } catch (err) {
