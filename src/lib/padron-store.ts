@@ -200,10 +200,14 @@ export function getPadronRecords({
   search = '',
   estamento = '',
   rbd = '',
+  page = 1,
+  pageSize = 50,
 }: {
   search?: string;
   estamento?: string;
   rbd?: string;
+  page?: number;
+  pageSize?: number;
 } = {}): {
   records: PadronRecord[];
   total: number;
