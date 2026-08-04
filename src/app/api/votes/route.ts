@@ -13,6 +13,7 @@ import {
   markUserAsVoted,
   SESSION_COOKIE_NAME,
 } from '@/lib/server-session';
+import { checkVotingWindowStatusAsync } from '@/lib/election-config-store';
 import type { Estamento } from '@/types';
 
 export async function POST(request: Request) {
@@ -41,6 +42,15 @@ export async function POST(request: Request) {
     return NextResponse.json(
       { message: 'Datos de sesión incompletos. Por favor inicia sesión nuevamente.' },
       { status: 401 },
+    );
+  }
+
+  // Validar si la ventana de votación está abierta y si el estamento está habilitado
+  const windowCheck = await checkVotingWindowStatusAsync(userEstamento);
+  if (!windowCheck.canVote) {
+    return NextResponse.json(
+      { message: windowCheck.reason || 'El período de votación no se encuentra disponible.' },
+      { status: 403 },
     );
   }
 

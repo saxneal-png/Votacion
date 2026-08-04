@@ -208,3 +208,25 @@ CREATE POLICY "Lectura pública de catálogo maestro" ON bd_establecimientos_mae
 CREATE POLICY "Administración total de catálogo maestro" ON bd_establecimientos_maestro
     FOR ALL USING (auth.role() = 'service_role');
 
+-- -----------------------------------------------------------------------------
+-- TABLA DE CONFIGURACIÓN Y PROGRAMACIÓN ELECTORAL (ESTAMENTOS Y VENTANA DE HORARIO)
+-- -----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS bd_configuracion_eleccion (
+    id VARCHAR(50) PRIMARY KEY DEFAULT 'config_principal',
+    titulo_proceso TEXT NOT NULL DEFAULT 'Elección de Representantes del Consejo Local SLEP',
+    estamentos_habilitados JSONB NOT NULL DEFAULT '["ESTUDIANTES","PADRES_APODERADOS","DOCENTES","ASISTENTES","DIRECTIVOS"]'::jsonb,
+    fecha_inicio TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    fecha_fin TIMESTAMPTZ NOT NULL DEFAULT (NOW() + INTERVAL '30 days'),
+    estado_eleccion TEXT NOT NULL DEFAULT 'ABIERTA',
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE bd_configuracion_eleccion ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Lectura pública de configuración electoral" ON bd_configuracion_eleccion
+    FOR SELECT USING (true);
+
+CREATE POLICY "Administración total de configuración electoral" ON bd_configuracion_eleccion
+    FOR ALL USING (auth.role() = 'service_role');
+
+

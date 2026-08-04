@@ -7,6 +7,7 @@ import type { ConnectionTestResult } from '@/lib/azure-m365-service';
 import { cleanAndValidateRUT } from '@/lib/rut-validator';
 import type { VotingRecordEntry } from '@/lib/voting-record-store';
 import { formatChileDateTime } from '@/lib/chile-time';
+import type { ElectionConfig, ElectionStatusCheck, EstamentoCodigo, EstadoEleccion } from '@/lib/election-config-store';
 
 interface AdminViewProps {
   metrics: AdminMetrics;
@@ -16,7 +17,7 @@ interface AdminViewProps {
   onLogout: () => void;
 }
 
-type AdminTab = 'padron' | 'candidaturas' | 'metrics' | 'registro' | 'audit' | 'azure' | 'cloud';
+type AdminTab = 'padron' | 'programacion' | 'candidaturas' | 'metrics' | 'registro' | 'audit' | 'azure' | 'cloud';
 
 function pct(part: number, total: number): string {
   if (total === 0) return '0.0';
@@ -322,6 +323,107 @@ export function AdminView({
     }
   }
 
+  // Election Config State (Pestaña 2: Programación)
+  const [electionConfig, setElectionConfig] = useState<ElectionConfig | null>(null);
+  const [windowStatus, setWindowStatus] = useState<ElectionStatusCheck | null>(null);
+  const [loadingConfig, setLoadingConfig] = useState(false);
+  const [savingConfig, setSavingConfig] = useState(false);
+  const [configMessage, setConfigMessage] = useState<string | null>(null);
+
+  const [confTitulo, setConfTitulo] = useState('');
+  const [confEstamentos, setConfEstamentos] = useState<EstamentoCodigo[]>([]);
+  const [confFechaInicio, setConfFechaInicio] = useState('');
+  const [confFechaFin, setConfFechaFin] = useState('');
+  const [confEstado, setConfEstado] = useState<EstadoEleccion>('ABIERTA');
+
+  function toDatetimeLocalString(isoOrDateString?: string): string {
+    if (!isoOrDateString) return '';
+    try {
+      const d = new Date(isoOrDateString);
+      if (isNaN(d.getTime())) return '';
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      const hours = String(d.getHours()).padStart(2, '0');
+      const minutes = String(d.getMinutes()).padStart(2, '0');
+      return `${year}-${month}-${day}T${hours}:${minutes}`;
+    } catch {
+      return '';
+    }
+  }
+
+  function toggleEstamentoSelection(estamento: EstamentoCodigo) {
+    if (confEstamentos.includes(estamento)) {
+      setConfEstamentos(confEstamentos.filter((e) => e !== estamento));
+    } else {
+      setConfEstamentos([...confEstamentos, estamento]);
+    }
+  }
+
+  async function fetchElectionConfig() {
+    setLoadingConfig(true);
+    try {
+      const res = await fetch('/api/admin/election-config', { credentials: 'same-origin' });
+      if (res.ok) {
+        const data = (await res.json()) as { config: ElectionConfig; windowStatus: ElectionStatusCheck };
+        setElectionConfig(data.config);
+        setWindowStatus(data.windowStatus);
+        setConfTitulo(data.config.tituloProceso || '');
+        setConfEstamentos(data.config.estamentosHabilitados || []);
+        setConfFechaInicio(toDatetimeLocalString(data.config.fechaInicio));
+        setConfFechaFin(toDatetimeLocalString(data.config.fechaFin));
+        setConfEstado(data.config.estadoEleccion || 'ABIERTA');
+      }
+    } catch (err) {
+      console.error('Error al obtener configuración electoral:', err);
+    } finally {
+      setLoadingConfig(false);
+    }
+  }
+
+  async function handleSaveElectionConfig() {
+    if (confEstamentos.length === 0) {
+      alert('Debes seleccionar al menos un (1) estamento participante para realizar el sufragio.');
+      return;
+    }
+    if (!confFechaInicio || !confFechaFin) {
+      alert('Debes ingresar la fecha y hora de inicio y término.');
+      return;
+    }
+
+    setSavingConfig(true);
+    setConfigMessage(null);
+
+    try {
+      const res = await fetch('/api/admin/election-config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tituloProceso: confTitulo.trim(),
+          estamentosHabilitados: confEstamentos,
+          fechaInicio: new Date(confFechaInicio).toISOString(),
+          fechaFin: new Date(confFechaFin).toISOString(),
+          estadoEleccion: confEstado,
+        }),
+        credentials: 'same-origin',
+      });
+
+      const data = (await res.json()) as { success: boolean; config?: ElectionConfig; windowStatus?: ElectionStatusCheck; message?: string };
+
+      if (res.ok && data.success) {
+        setConfigMessage('✅ Configuración del proceso electoral y programación horaria guardada exitosamente.');
+        if (data.config) setElectionConfig(data.config);
+        if (data.windowStatus) setWindowStatus(data.windowStatus);
+      } else {
+        setConfigMessage(`❌ ${data.message || 'Error al guardar la configuración.'}`);
+      }
+    } catch (err) {
+      setConfigMessage(err instanceof Error ? `❌ ${err.message}` : '❌ Error al guardar.');
+    } finally {
+      setSavingConfig(false);
+    }
+  }
+
   // Formulario manual Votante
   const [newRutVotante, setNewRutVotante] = useState('');
   const [newRutEstudiante, setNewRutEstudiante] = useState('');
@@ -613,8 +715,14 @@ export function AdminView({
   }
 
   useEffect(() => {
+    void fetchElectionConfig();
+  }, []);
+
+  useEffect(() => {
     if (activeTab === 'padron') {
       void fetchPadron(padronPage);
+    } else if (activeTab === 'programacion') {
+      void fetchElectionConfig();
     } else if (activeTab === 'candidaturas') {
       void fetchCandidatos();
     } else if (activeTab === 'registro') {
@@ -1111,13 +1219,25 @@ az webapp config appsettings set --resource-group rg-slep-elecciones --name vota
           <button
             type="button"
             className={`py-2.5 px-4 text-xs font-bold transition-all border-b-2 whitespace-nowrap ${
+              activeTab === 'programacion'
+                ? 'border-emerald-400 text-white bg-white/10'
+                : 'border-transparent text-slate-300 hover:text-white hover:bg-white/5'
+            }`}
+            onClick={() => setActiveTab('programacion')}
+          >
+            📅 2. Programación y Estamentos
+          </button>
+
+          <button
+            type="button"
+            className={`py-2.5 px-4 text-xs font-bold transition-all border-b-2 whitespace-nowrap ${
               activeTab === 'candidaturas'
                 ? 'border-emerald-400 text-white bg-white/10'
                 : 'border-transparent text-slate-300 hover:text-white hover:bg-white/5'
             }`}
             onClick={() => setActiveTab('candidaturas')}
           >
-            👤 2. Candidaturas
+            👤 3. Candidaturas
           </button>
 
           <button
@@ -1129,7 +1249,7 @@ az webapp config appsettings set --resource-group rg-slep-elecciones --name vota
             }`}
             onClick={() => setActiveTab('metrics')}
           >
-            📊 3. Métricas y Participación
+            📊 4. Métricas y Participación
           </button>
 
           <button
@@ -1141,7 +1261,7 @@ az webapp config appsettings set --resource-group rg-slep-elecciones --name vota
             }`}
             onClick={() => setActiveTab('registro')}
           >
-            📋 4. Registro Votación (Folios)
+            📋 5. Registro Votación (Folios)
           </button>
 
           <button
@@ -1153,7 +1273,7 @@ az webapp config appsettings set --resource-group rg-slep-elecciones --name vota
             }`}
             onClick={() => setActiveTab('audit')}
           >
-            📜 5. Auditoría
+            📜 6. Auditoría
           </button>
 
           <button
@@ -1504,7 +1624,213 @@ az webapp config appsettings set --resource-group rg-slep-elecciones --name vota
         )}
 
         {/* ==================================================================== */}
-        {/* PESTAÑA 2: MÓDULO DE REGISTRO Y GESTIÓN DE CANDIDATURAS              */}
+        {/* PESTAÑA 2: PROGRAMACIÓN DEL PERÍODO Y SELECCIÓN DE ESTAMENTOS       */}
+        {/* ==================================================================== */}
+        {activeTab === 'programacion' && (
+          <div className="space-y-6">
+            {/* Header del módulo */}
+            <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-wrap items-center justify-between gap-4">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-2xl">📅</span>
+                  <h2 className="text-lg font-serif font-bold text-slate-900">
+                    Programación Horaria y Selección de Estamentos Participantes
+                  </h2>
+                </div>
+                <p className="text-xs text-slate-500 font-medium">
+                  Define cuáles estamentos (Decreto N° 102) realizarán el sufragio en esta elección y establece el período exacto de inicio y término (hora oficial de Chile Continental).
+                </p>
+              </div>
+
+              {/* Status Badge */}
+              <div className="flex items-center gap-3">
+                {windowStatus && (
+                  <div className={`px-3.5 py-2 rounded-xl border font-bold text-xs flex items-center gap-2 ${
+                    windowStatus.status === 'OPEN'
+                      ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                      : windowStatus.status === 'UPCOMING'
+                      ? 'bg-amber-50 border-amber-200 text-amber-800'
+                      : windowStatus.status === 'PAUSED'
+                      ? 'bg-orange-50 border-orange-200 text-orange-800'
+                      : 'bg-red-50 border-red-200 text-red-800'
+                  }`}>
+                    <span className="w-2.5 h-2.5 rounded-full animate-ping" style={{
+                      backgroundColor: windowStatus.status === 'OPEN' ? '#10b981' : windowStatus.status === 'UPCOMING' ? '#f59e0b' : '#ef4444'
+                    }} />
+                    <span>
+                      {windowStatus.status === 'OPEN' && '🟢 Elección Abierta en Proceso'}
+                      {windowStatus.status === 'UPCOMING' && '🟡 Elección Programada (Futura)'}
+                      {windowStatus.status === 'PAUSED' && '🟠 Elección Pausada'}
+                      {windowStatus.status === 'ENDED' && '🔴 Elección Finalizada'}
+                      {windowStatus.status === 'ESTAMENTO_DISABLED' && '⚠️ Estamento no seleccionado'}
+                    </span>
+                  </div>
+                )}
+
+                <button
+                  type="button"
+                  onClick={handleSaveElectionConfig}
+                  disabled={savingConfig}
+                  className="px-5 py-2.5 bg-[#0b5294] hover:bg-[#0a4278] text-white text-xs font-extrabold rounded-xl transition shadow-md flex items-center gap-2 disabled:opacity-50"
+                >
+                  <span>💾</span> {savingConfig ? 'Guardando...' : 'Guardar Programación'}
+                </button>
+              </div>
+            </div>
+
+            {configMessage && (
+              <div className={`p-4 rounded-xl text-xs font-bold ${configMessage.startsWith('✅') ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'bg-red-50 text-red-800 border border-red-200'}`}>
+                {configMessage}
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Card 1: Selección de Estamentos Habilitados */}
+              <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+                <div className="border-b pb-3 border-slate-100 flex items-center justify-between">
+                  <h3 className="font-serif font-bold text-sm text-slate-900 flex items-center gap-2">
+                    <span>🗳️</span> Estamentos Seleccionados para el Sufragio
+                  </h3>
+                  <span className="text-[11px] font-extrabold px-2.5 py-0.5 rounded-full bg-purple-100 text-purple-800">
+                    {confEstamentos.length} de 5 Estamentos Activos
+                  </span>
+                </div>
+
+                <p className="text-xs text-slate-600 font-medium">
+                  Marca únicamente los estamentos que votarán en esta jornada electoral. Los votantes de estamentos desmarcados no podrán iniciar sesión ni emitir votos durante este proceso.
+                </p>
+
+                <div className="space-y-3 pt-2">
+                  {[
+                    { key: 'ESTUDIANTES' as EstamentoCodigo, label: 'Estudiantes', icon: '🎓', desc: 'Votantes matriculados en niveles de educación básica/media' },
+                    { key: 'PADRES_APODERADOS' as EstamentoCodigo, label: 'Padres y Apoderados', icon: '👨‍👩‍👧', desc: 'Tutores legales inscritos en el padrón con RUN del estudiante' },
+                    { key: 'DOCENTES' as EstamentoCodigo, label: 'Docentes / Profesores', icon: '👩‍🏫', desc: 'Cuerpo docente registrado en los establecimientos SLEP' },
+                    { key: 'ASISTENTES' as EstamentoCodigo, label: 'Asistentes de la Educación', icon: '🛠️', desc: 'Personal administrativo, técnico y paradocente' },
+                    { key: 'DIRECTIVOS' as EstamentoCodigo, label: 'Equipo Directivo / Gestión', icon: '👔', desc: 'Directores y equipo directivo institucional' },
+                  ].map((est) => {
+                    const isChecked = confEstamentos.includes(est.key);
+                    return (
+                      <label
+                        key={est.key}
+                        className={`flex items-start gap-3.5 p-3.5 rounded-xl border transition cursor-pointer ${
+                          isChecked
+                            ? 'bg-purple-50/70 border-purple-300 text-slate-900 shadow-sm'
+                            : 'bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100'
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={() => toggleEstamentoSelection(est.key)}
+                          className="mt-1 w-4 h-4 text-purple-700 rounded border-slate-300 focus:ring-purple-500 cursor-pointer"
+                        />
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 font-bold text-xs text-slate-900">
+                            <span>{est.icon}</span>
+                            <span>{est.label}</span>
+                            {isChecked && (
+                              <span className="text-[10px] bg-emerald-100 text-emerald-800 font-extrabold px-2 py-0.5 rounded-full">
+                                Habilitado para votar
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-[11px] text-slate-500 font-medium m-0 mt-0.5">
+                            {est.desc}
+                          </p>
+                        </div>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Card 2: Ventana Horaria y Estado del Proceso */}
+              <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-5">
+                <div className="border-b pb-3 border-slate-100">
+                  <h3 className="font-serif font-bold text-sm text-slate-900 flex items-center gap-2">
+                    <span>🕒</span> Período de Votación y Estado (Chile Continental)
+                  </h3>
+                </div>
+
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                      Nombre o Título del Proceso Electoral
+                    </label>
+                    <input
+                      type="text"
+                      className="w-full h-10 px-3 text-xs rounded-xl border border-slate-200 bg-slate-50 font-semibold text-slate-800 focus:outline-none focus:border-[#0b5294]"
+                      value={confTitulo}
+                      onChange={(e) => setConfTitulo(e.target.value)}
+                      placeholder="Ej. Elección del Consejo Local SLEP 2026"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 uppercase mb-1 flex items-center gap-1">
+                        <span>🚀</span> Inicio de Votación
+                      </label>
+                      <input
+                        type="datetime-local"
+                        className="w-full h-10 px-3 text-xs rounded-xl border border-slate-200 bg-slate-50 font-mono font-bold text-slate-800 focus:outline-none focus:border-[#0b5294]"
+                        value={confFechaInicio}
+                        onChange={(e) => setConfFechaInicio(e.target.value)}
+                      />
+                      <span className="text-[10px] text-slate-400 font-medium mt-1 block">
+                        Hora oficial de Chile Continental (America/Santiago)
+                      </span>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 uppercase mb-1 flex items-center gap-1">
+                        <span>🏁</span> Cierre de Votación
+                      </label>
+                      <input
+                        type="datetime-local"
+                        className="w-full h-10 px-3 text-xs rounded-xl border border-slate-200 bg-slate-50 font-mono font-bold text-slate-800 focus:outline-none focus:border-[#0b5294]"
+                        value={confFechaFin}
+                        onChange={(e) => setConfFechaFin(e.target.value)}
+                      />
+                      <span className="text-[10px] text-slate-400 font-medium mt-1 block">
+                        Cierre automático del sistema al expirar
+                      </span>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                      Estado del Proceso Electoral
+                    </label>
+                    <select
+                      className="w-full h-10 px-3 text-xs font-bold rounded-xl border border-slate-200 bg-slate-50 text-slate-800 focus:outline-none focus:border-[#0b5294]"
+                      value={confEstado}
+                      onChange={(e) => setConfEstado(e.target.value as EstadoEleccion)}
+                    >
+                      <option value="ABIERTA">🟢 ABIERTA — Permitir sufragio en la ventana horaria</option>
+                      <option value="PROGRAMADA">🟡 PROGRAMADA — Esperando fecha y hora de inicio</option>
+                      <option value="PAUSADA">🟠 PAUSADA — Pausar votación temporalmente por la comisión</option>
+                      <option value="FINALIZADA">🔴 FINALIZADA — Cerrar oficialmente la elección</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 text-xs text-slate-600 space-y-1 font-medium">
+                  <div className="font-bold text-slate-800 flex items-center gap-1.5">
+                    <span>💡</span> Resumen de Operación del Sistema:
+                  </div>
+                  <ul className="list-disc pl-4 space-y-1 text-[11px] text-slate-600">
+                    <li>Los votantes solo podrán autenticarse y emitir votos si la fecha/hora actual de Chile está dentro del rango configurado.</li>
+                    <li>Solo los candidatos vinculados a los estamentos marcados como habilitados figurarán en las cédulas de votación.</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ==================================================================== */}
+        {/* PESTAÑA 3: MÓDULO DE REGISTRO Y GESTIÓN DE CANDIDATURAS              */}
         {/* ==================================================================== */}
         {activeTab === 'candidaturas' && (
           <div className="space-y-6">

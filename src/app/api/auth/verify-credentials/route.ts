@@ -8,6 +8,8 @@ import {
   validateFuncionarioAuthAsync,
 } from '@/services/authRulesService';
 
+import { checkVotingWindowStatusAsync } from '@/lib/election-config-store';
+
 export async function POST(request: Request) {
   try {
     const body = (await request.json().catch(() => ({}))) as {
@@ -44,6 +46,15 @@ export async function POST(request: Request) {
     } else {
       matchedRecord = await validateFuncionarioAuthAsync(rut, email);
       estamentoLabel = matchedRecord.estamento;
+    }
+
+    // Validar si el período de votación está habilitado y si el estamento del votante fue seleccionado
+    const windowCheck = await checkVotingWindowStatusAsync(matchedRecord.estamento);
+    if (!windowCheck.canVote) {
+      return NextResponse.json(
+        { message: windowCheck.reason || 'El período de votación no se encuentra disponible.' },
+        { status: 403 },
+      );
     }
 
 
