@@ -776,16 +776,35 @@ export async function getAllSchoolsAsync(): Promise<SchoolFilterOption[]> {
     return Array.from(map.entries()).map(([rbd, nombre]) => ({ rbd, nombre }));
   }
 
-  // 1. Catálogo Maestro (fuente de verdad: 131 RBDs oficiales)
+  // 1. Catálogo Maestro / Vista Dashboard (fuente de verdad: 131 RBDs oficiales)
   try {
-    const masterSchools = await getSchoolsMasterAsync();
-    masterSchools.forEach((s) => {
-      const rbd = String(s.rbd || '').trim();
-      const nombre = String(s.nombreOficial || '').trim();
-      if (rbd && nombre) map.set(rbd, nombre);
-    });
-  } catch (err) {
-    console.error('[SUPABASE] Error obteniendo catálogo maestro en getAllSchoolsAsync:', err);
+    const { data: viewData, error: viewErr } = await supabaseAdmin
+      .from('vista_dashboard_escuelas')
+      .select('rbd, nombre_oficial')
+      .order('rbd', { ascending: true });
+
+    if (!viewErr && viewData && viewData.length > 0) {
+      viewData.forEach((s: Record<string, unknown>) => {
+        const rbd = String(s.rbd || '').trim();
+        const nombre = String(s.nombre_oficial || '').trim();
+        if (rbd && nombre) map.set(rbd, nombre);
+      });
+    }
+  } catch {
+    // Continuar a catálogo maestro
+  }
+
+  if (map.size === 0) {
+    try {
+      const masterSchools = await getSchoolsMasterAsync();
+      masterSchools.forEach((s) => {
+        const rbd = String(s.rbd || '').trim();
+        const nombre = String(s.nombreOficial || '').trim();
+        if (rbd && nombre) map.set(rbd, nombre);
+      });
+    } catch (err) {
+      console.error('[SUPABASE] Error obteniendo catálogo maestro en getAllSchoolsAsync:', err);
+    }
   }
 
   // 2. Consulta DISTINCT a bd_padron para capturar RBDs no presentes en el maestro
