@@ -295,29 +295,34 @@ export async function getCandidatosAsync({
 export async function addCandidatoAsync(data: CandidateFormData): Promise<Candidate> {
   const local = addCandidato(data);
 
-  try {
-    const { error } = await supabaseAdmin.from('candidatos').insert({
-      id: local.id,
-      nombre_completo: local.nombreCompleto || local.name,
-      cargo_role: local.escuelaEstablecimiento || local.role,
-      slogan_propuesta: local.propuestaPrincipal || local.slogan,
-      iniciales: local.initials,
-      color_acento: local.accentColor,
-      estamento: local.estamento,
-      biografia: local.biografia || '',
-      foto_perfil: local.fotoPerfil || null,
-      votos_acumulados: 0,
-      created_at: new Date().toISOString(),
-    });
+  if (supabaseAdmin) {
+    try {
+      const { error } = await supabaseAdmin.from('candidatos').insert({
+        id: local.id,
+        nombre_completo: local.nombreCompleto || local.name,
+        cargo_role: local.escuelaEstablecimiento || local.role,
+        slogan_propuesta: local.propuestaPrincipal || local.slogan,
+        iniciales: local.initials,
+        color_acento: local.accentColor,
+        estamento: local.estamento,
+        biografia: local.biografia || '',
+        foto_perfil: local.fotoPerfil || null,
+        votos_acumulados: 0,
+        created_at: new Date().toISOString(),
+      });
 
-    if (error) {
-      console.error('[SUPABASE] Error insertando candidato:', error.message);
-    } else {
+      if (error) {
+        console.error('[SUPABASE] Error insertando candidato:', error.message);
+        deleteCandidato(local.id);
+        throw new Error(`Error guardando candidato en Supabase: ${error.message}`);
+      }
+
       console.log('[SUPABASE] Candidato insertado en Supabase:', local.id);
       revalidateCandidatesCache();
+    } catch (err) {
+      deleteCandidato(local.id);
+      throw err;
     }
-  } catch (err) {
-    console.error('[SUPABASE] Excepción al insertar candidato:', err);
   }
 
   return local;
@@ -327,58 +332,93 @@ export async function addCandidatoAsync(data: CandidateFormData): Promise<Candid
  * Actualizar candidato en Supabase y en memoria
  */
 export async function updateCandidatoAsync(id: string, data: Partial<CandidateFormData>): Promise<Candidate> {
-  const local = updateCandidato(id, data);
+  if (supabaseAdmin) {
+    const updatePayload: Record<string, unknown> = {};
+    if (data.nombreCompleto) updatePayload.nombre_completo = data.nombreCompleto.trim();
+    if (data.escuelaEstablecimiento) updatePayload.cargo_role = data.escuelaEstablecimiento.trim();
+    if (data.propuestaPrincipal) updatePayload.slogan_propuesta = data.propuestaPrincipal.trim();
+    if (data.estamento) updatePayload.estamento = data.estamento;
+    if (data.biografia !== undefined) updatePayload.biografia = data.biografia.trim();
+    if (data.fotoPerfil !== undefined) updatePayload.foto_perfil = data.fotoPerfil.trim() || null;
 
-  try {
     const { error } = await supabaseAdmin
       .from('candidatos')
-      .update({
-        nombre_completo: local.nombreCompleto || local.name,
-        cargo_role: local.escuelaEstablecimiento || local.role,
-        slogan_propuesta: local.propuestaPrincipal || local.slogan,
-        iniciales: local.initials,
-        estamento: local.estamento,
-        biografia: local.biografia || '',
-        foto_perfil: local.fotoPerfil || null,
-      })
+      .update(updatePayload)
       .eq('id', id);
 
     if (error) {
       console.error('[SUPABASE] Error actualizando candidato:', error.message);
-    } else {
-      console.log('[SUPABASE] Candidato actualizado en Supabase:', id);
-      revalidateCandidatesCache();
+      throw new Error(`Error actualizando candidato en Supabase: ${error.message}`);
     }
-  } catch (err) {
-    console.error('[SUPABASE] Excepción al actualizar candidato:', err);
+
+    console.log('[SUPABASE] Candidato actualizado en Supabase:', id);
+    revalidateCandidatesCache();
   }
 
-  return local;
+  return updateCandidato(id, data);
 }
 
 /**
- * Eliminar candidato en Supabase y en memoria
+ * Eliminar candidato en Supabase y en memoria con manejo estricto de FK constraints
  */
 export async function deleteCandidatoAsync(id: string): Promise<boolean> {
-  const deleted = deleteCandidato(id);
+  if (supabaseAdmin) {
+    const { error } = await supabaseAdmin
+      .from('candidatos')
+      .delete()
+      .eq('id', id);
 
-  if (deleted) {
-    try {
-      const { error } = await supabaseAdmin
-        .from('candidatos')
-        .delete()
-        .eq('id', id);
-
-      if (error) {
-        console.error('[SUPABASE] Error eliminando candidato:', error.message);
-      } else {
-        console.log('[SUPABASE] Candidato eliminado de Supabase:', id);
-        revalidateCandidatesCache();
+    if (error) {
+      console.error('[SUPABASE] Error eliminando candidato:', error.message);
+      if (
+        error.code === '23503' ||
+        error.message.toLowerCase().includes('foreign key') ||
+        error.message.toLowerCase().includes('violates') ||
+        error.message.toLowerCase().includes('constraint')
+      ) {
+        throw new Error(
+          'No se puede eliminar el candidato porque ya cuenta con votos o registros asociados en la base de datos. Debes reiniciar el proceso electoral si deseas remover candidaturas.',
+        );
       }
-    } catch (err) {
-      console.error('[SUPABASE] Excepción al eliminar candidato:', err);
+      throw new Error(`Error al eliminar candidato en Supabase: ${error.message}`);
+    }
+    console.log('[SUPABASE] Candidato eliminado de Supabase:', id);
+  }
+
+  const deleted = deleteCandidato(id);
+  if (deleted) {
+    revalidateCandidatesCache();
+  }
+  return deleted;
+}
+
+/**
+ * Vaciar la totalidad de los candidatos de Supabase y memoria
+ */
+export async function clearAllCandidatosAsync(): Promise<boolean> {
+  if (supabaseAdmin) {
+    const { error } = await supabaseAdmin
+      .from('candidatos')
+      .delete()
+      .neq('id', '00000000-0000-0000-0000-000000000000');
+
+    if (error) {
+      console.error('[SUPABASE] Error al vaciar candidatos:', error.message);
+      if (
+        error.code === '23503' ||
+        error.message.toLowerCase().includes('foreign key') ||
+        error.message.toLowerCase().includes('violates') ||
+        error.message.toLowerCase().includes('constraint')
+      ) {
+        throw new Error(
+          'No se pueden eliminar las candidaturas porque existen votos o registros de sufragio asociados en la base de datos. Realiza un reinicio de la elección primero.',
+        );
+      }
+      throw new Error(`Error al vaciar candidatos en Supabase: ${error.message}`);
     }
   }
 
-  return deleted;
+  candidatesStore.length = 0;
+  revalidateCandidatesCache();
+  return true;
 }

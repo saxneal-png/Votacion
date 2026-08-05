@@ -5,6 +5,7 @@ import { ADMIN_SESSION_COOKIE, validateAdminSession } from '@/lib/admin-session'
 import {
   addCandidatoAsync,
   CandidateFormData,
+  clearAllCandidatosAsync,
   deleteCandidatoAsync,
   getCandidatosAsync,
   updateCandidatoAsync,
@@ -102,11 +103,21 @@ export async function DELETE(request: NextRequest) {
 
   try {
     const { searchParams } = new URL(request.url);
+    const clearAll = searchParams.get('clearAll') === 'true';
     let id = searchParams.get('id');
 
+    if (clearAll) {
+      await clearAllCandidatosAsync();
+      return NextResponse.json({ success: true, message: 'Todas las candidaturas fueron eliminadas correctamente.' });
+    }
+
     if (!id) {
-      const body = (await request.json().catch(() => ({}))) as { id?: string };
+      const body = (await request.json().catch(() => ({}))) as { id?: string; clearAll?: boolean };
       id = body.id || null;
+      if (body.clearAll) {
+        await clearAllCandidatosAsync();
+        return NextResponse.json({ success: true, message: 'Todas las candidaturas fueron eliminadas correctamente.' });
+      }
     }
 
     if (!id) {
@@ -122,7 +133,7 @@ export async function DELETE(request: NextRequest) {
   } catch (error) {
     return NextResponse.json(
       { message: error instanceof Error ? error.message : 'Error al eliminar candidato.' },
-      { status: 500 },
+      { status: 400 },
     );
   }
 }
