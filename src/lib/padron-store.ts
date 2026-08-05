@@ -762,71 +762,74 @@ function mapRowToPadronRecord(item: Record<string, unknown>): PadronRecord {
 }
 
 /**
- * Obtiene la lista completa de todos los establecimientos reales únicos presentes en bd_establecimientos_maestro y bd_padron (Supabase)
+ * Obtiene la lista completa de todos los establecimientos únicos desde:
+ * 1. bd_establecimientos_maestro (131 colegios oficiales - fuente de verdad)
+ * 2. bd_padron via DISTINCT rbd_establecimiento (complementa colegios no en maestro)
  */
 export async function getAllSchoolsAsync(): Promise<SchoolFilterOption[]> {
   const map = new Map<string, string>();
 
-  // 1. Obtener establecimientos del Catálogo Maestro (que contiene los 131 colegios base)
+  if (!supabaseAdmin) {
+    // Fallback solo en memoria local
+    const localSchools = getAvailableSchools(padronStore);
+    localSchools.forEach((s) => { if (s.rbd && s.nombre) map.set(s.rbd, s.nombre); });
+    return Array.from(map.entries()).map(([rbd, nombre]) => ({ rbd, nombre }));
+  }
+
+  // 1. Catálogo Maestro (fuente de verdad: 131 RBDs oficiales)
   try {
     const masterSchools = await getSchoolsMasterAsync();
     masterSchools.forEach((s) => {
       const rbd = String(s.rbd || '').trim();
       const nombre = String(s.nombreOficial || '').trim();
-      if (rbd && nombre) {
-        map.set(rbd, nombre);
-      }
+      if (rbd && nombre) map.set(rbd, nombre);
     });
   } catch (err) {
     console.error('[SUPABASE] Error obteniendo catálogo maestro en getAllSchoolsAsync:', err);
   }
 
-  // 2. Si ya tenemos colegios desde el catálogo maestro, hacer 1 sola consulta rápida a bd_padron para capturar eventuales excepciones
-  // Si no hay catálogo maestro cargado, iterar hasta un máximo de 5 lotes (5.000 filas) para no penalizar tiempos de respuesta.
-  if (supabaseAdmin) {
-    try {
-      const maxPages = map.size > 0 ? 1 : 5;
-      const pageSize = 1000;
+  // 2. Consulta DISTINCT a bd_padron para capturar RBDs no presentes en el maestro
+  //    Una sola query eficiente independientemente del tamaño de la tabla
+  try {
+    // Paginación por lotes de 2.000 para obtener todos los RBDs únicos
+    const BATCH = 2000;
+    let page = 0;
+    let hasMore = true;
 
-      for (let page = 0; page < maxPages; page++) {
-        const from = page * pageSize;
-        const to = from + pageSize - 1;
+    while (hasMore) {
+      const { data, error } = await supabaseAdmin
+        .from('bd_padron')
+        .select('rbd_establecimiento, nombre_establecimiento')
+        .not('rbd_establecimiento', 'is', null)
+        .order('rbd_establecimiento', { ascending: true })
+        .range(page * BATCH, (page + 1) * BATCH - 1);
 
-        const { data, error } = await supabaseAdmin
-          .from('bd_padron')
-          .select('rbd_establecimiento, nombre_establecimiento')
-          .range(from, to);
+      if (error || !data || data.length === 0) { hasMore = false; break; }
 
-        if (error || !data || data.length === 0) {
-          break;
-        }
+      data.forEach((item: Record<string, unknown>) => {
+        const rbd = String(item.rbd_establecimiento || '').trim();
+        const nombre = String(item.nombre_establecimiento || '').trim();
+        // Solo agregar si no está ya en el mapa (el maestro tiene prioridad)
+        if (rbd && nombre && !map.has(rbd)) map.set(rbd, nombre);
+      });
 
-        data.forEach((item: Record<string, unknown>) => {
-          const rbd = String(item.rbd_establecimiento || '').trim();
-          const nombre = String(item.nombre_establecimiento || '').trim();
-          if (rbd && nombre) {
-            map.set(rbd, nombre);
-          }
-        });
-
-        if (data.length < pageSize) {
-          break;
-        }
-      }
-    } catch (err) {
-      console.error('[SUPABASE] Error obteniendo lista de establecimientos de bd_padron:', err);
+      // Si ya tenemos todos los RBDs del maestro y la bd_padron solo añade
+      // colegios del mismo set, podemos parar cuando la paginación no añade nuevos.
+      if (data.length < BATCH) { hasMore = false; } else { page++; }
     }
+  } catch (err) {
+    console.error('[SUPABASE] Error obteniendo establecimientos de bd_padron:', err);
   }
 
-  // 3. Fallback en memoria local
-  const localSchools = getAvailableSchools(padronStore);
-  localSchools.forEach((s) => {
-    if (s.rbd && s.nombre && !map.has(s.rbd)) {
-      map.set(s.rbd, s.nombre);
-    }
-  });
+  // 3. Fallback en memoria local si todo falló
+  if (map.size === 0) {
+    const localSchools = getAvailableSchools(padronStore);
+    localSchools.forEach((s) => { if (s.rbd && s.nombre) map.set(s.rbd, s.nombre); });
+  }
 
-  return Array.from(map.entries()).map(([rbd, nombre]) => ({ rbd, nombre }));
+  return Array.from(map.entries())
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([rbd, nombre]) => ({ rbd, nombre }));
 }
 
 /**

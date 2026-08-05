@@ -2024,7 +2024,7 @@ az webapp config appsettings set --resource-group rg-slep-elecciones --name vota
                 label="Estamentos en Proceso"
                 value={metrics.estamentos.length}
                 accent="#b45309"
-                sub="Directivos, Docentes, Asistentes, Apoderados, Estudiantes"
+                sub={metrics.estamentos.map((e) => e.label).join(', ')}
               />
             </div>
 

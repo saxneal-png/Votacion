@@ -3,9 +3,9 @@ import { type NextRequest, NextResponse } from 'next/server';
 
 import { getCandidatosAsync, getEstamentoVariants } from '@/lib/candidates-store';
 import { getAllPadronRecordsAsync, getAllSchoolsAsync } from '@/lib/padron-store';
-import { getSchoolsMasterAsync } from '@/lib/schools-master-store';
 import { getVotingRecordsAsync } from '@/lib/voting-record-store';
 import { getVoteTalliesAsync } from '@/lib/metrics-store';
+import { getElectionConfigAsync } from '@/lib/election-config-store';
 import {
   ADMIN_SESSION_COOKIE,
   addAuditEntry,
@@ -40,16 +40,22 @@ export async function GET(request: NextRequest) {
   const slepId = url.searchParams.get('slep_id') || url.searchParams.get('slepId') || 'ALL';
   const schoolId = url.searchParams.get('school_id') || url.searchParams.get('rbd') || 'ALL';
 
-  // 1. Obtener candidatos actualizados (Supabase / Store)
+  // 1. Config del proceso electoral (para filtrar estamentos habilitados)
+  const electionConfig = await getElectionConfigAsync();
+  const estamentosHabilitadosSet = new Set(
+    (electionConfig.estamentosHabilitados ?? []).map((e: string) => e.toUpperCase())
+  );
+
+  // 2. Obtener candidatos actualizados (Supabase / Store)
   const allCandidates = await getCandidatosAsync({ estamento: 'ALL' });
 
-  // 2. Obtener padrón oficial sin truncamiento (paginación por lotes de 1.000 filas)
+  // 3. Obtener padrón oficial sin truncamiento (paginación por lotes de 1.000 filas)
   const { records: padronRecords, total: totalPadronCount } = await getAllPadronRecordsAsync({
     rbd: schoolId,
     slepId,
   });
 
-  // 3. Obtener actas oficiales de voto desde Supabase (usando supabaseAdmin, sin límite de RLS)
+  // 4. Obtener actas oficiales de voto desde Supabase (supabaseAdmin, sin límite de RLS)
   const { records: rawVotingRecords } = await getVotingRecordsAsync();
   const votingRecords = rawVotingRecords.filter((v) => {
     if (schoolId !== 'ALL' && v.rbdEstablecimiento !== schoolId) return false;
@@ -123,7 +129,23 @@ export async function GET(request: NextRequest) {
     { estamento: 'estudiantes' as Estamento, label: 'Estudiantes', color: '#0284c7' },
   ];
 
-  const estamentos: EstamentoResult[] = ESTAMENTO_META.map(({ estamento, label, color }) => {
+  // Filtrar solo los estamentos que están habilitados en la configuración del proceso
+  const ESTAMENTO_VARIANTS: Record<string, string> = {
+    'directivos': 'DIRECTIVOS',
+    'docentes': 'DOCENTES',
+    'asistentes': 'ASISTENTES',
+    'apoderados': 'PADRES_APODERADOS',
+    'estudiantes': 'ESTUDIANTES',
+  };
+
+  const estamentos: EstamentoResult[] = ESTAMENTO_META
+    .filter(({ estamento }) => {
+      // Si no hay config de estamentos, mostrar todos
+      if (estamentosHabilitadosSet.size === 0) return true;
+      const code = ESTAMENTO_VARIANTS[estamento] ?? estamento.toUpperCase();
+      return estamentosHabilitadosSet.has(code);
+    })
+    .map(({ estamento, label, color }) => {
     const estamentoVariants = getEstamentoVariants(estamento).map((v) => v.toLowerCase());
     const estamentoCandidates = allCandidates.filter((c) =>
       estamentoVariants.includes(c.estamento.toLowerCase()),
@@ -147,20 +169,12 @@ export async function GET(request: NextRequest) {
     };
   });
 
-  // ── Escuelas: fuente de verdad = Catálogo Maestro (131 RBDs) + bd_padron ──
-  const realSchoolsList = await getAllSchoolsAsync();
-  const masterSchoolsList = await getSchoolsMasterAsync();
+  // ── Escuelas: getAllSchoolsAsync ya fusiona maestro + bd_padron con paginación completa ──
+  const allSchoolsList = await getAllSchoolsAsync();
 
   const realSchoolsMap = new Map<string, { rbd: string; name: string }>();
-  // Priorizar catálogo maestro (131 colegios oficiales) sobre bd_padron
-  masterSchoolsList.forEach((s) => {
-    if (s.rbd) realSchoolsMap.set(s.rbd, { rbd: s.rbd, name: s.nombreOficial });
-  });
-  // Complementar con establecimientos del padrón que no estén en el maestro
-  realSchoolsList.forEach((s) => {
-    if (!realSchoolsMap.has(s.rbd)) {
-      realSchoolsMap.set(s.rbd, { rbd: s.rbd, name: s.nombre });
-    }
+  allSchoolsList.forEach((s) => {
+    if (s.rbd) realSchoolsMap.set(s.rbd, { rbd: s.rbd, name: s.nombre });
   });
 
   const schools: SchoolResult[] = Array.from(realSchoolsMap.values()).map((s) => {
