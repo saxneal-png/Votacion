@@ -7,7 +7,7 @@
  */
 
 import { formatRut } from '@/lib/rut-validator';
-import { supabase } from '@/lib/supabase';
+import { supabaseAdmin } from '@/lib/supabase-client';
 import { formatChileDateTime } from '@/lib/chile-time';
 
 export interface VotingRecordEntry {
@@ -67,8 +67,8 @@ export function recordOfficialVote(params: {
   votingRecords.unshift(entry); // Nuevos registros primero
 
   // Persistir en Supabase solo si no se insertó previamente vía RPC
-  if (supabase && !params.skipSupabaseInsert) {
-    void supabase
+  if (supabaseAdmin && !params.skipSupabaseInsert) {
+    void supabaseAdmin
       .from('acta_sufragio')
       .insert({
         folio: entry.folio,
@@ -147,7 +147,7 @@ export async function getVotingRecordsAsync({
   estamento?: string;
   rbd?: string;
 } = {}): Promise<{ records: VotingRecordEntry[]; total: number }> {
-  if (!supabase) {
+  if (!supabaseAdmin) {
     return getVotingRecords({ search, estamento, rbd });
   }
 
@@ -158,7 +158,7 @@ export async function getVotingRecordsAsync({
     let hasMore = true;
 
     while (hasMore) {
-      let query = supabase.from('acta_sufragio').select('*').order('fecha_hora', { ascending: false });
+      let query = supabaseAdmin.from('acta_sufragio').select('*').order('fecha_hora', { ascending: false });
 
       if (estamento && estamento !== 'ALL') {
         query = query.eq('estamento', estamento.toUpperCase());
@@ -236,8 +236,8 @@ export async function getVotingRecordsAsync({
  */
 export function resetVotingRecords(): void {
   votingRecords.length = 0;
-  if (supabase) {
-    void supabase.from('acta_sufragio').delete().neq('folio', 'RESET_ALL');
+  if (supabaseAdmin) {
+    void supabaseAdmin.from('acta_sufragio').delete().neq('folio', 'RESET_ALL');
   }
 }
 

@@ -61,21 +61,43 @@ export async function getVoteTalliesAsync(_slepId?: string, _schoolId?: string):
   }
 
   try {
-    const { data, error } = await supabaseAdmin
-      .from('votos_anonimos')
-      .select('candidate_id');
+    // Paginación por lotes de 1.000 filas para evitar truncamiento de PostgREST
+    const BATCH_SIZE = 1000;
+    let page = 0;
+    let hasMore = true;
 
-    if (error || !data) {
-      console.error('[SUPABASE] Error obteniendo escrutinio de votos:', error?.message);
-      return map;
-    }
+    while (hasMore) {
+      const from = page * BATCH_SIZE;
+      const to = from + BATCH_SIZE - 1;
 
-    data.forEach((row: { candidate_id: string }) => {
-      const cid = String(row.candidate_id ?? '').trim();
-      if (cid) {
-        map.set(cid, (map.get(cid) ?? 0) + 1);
+      const { data, error } = await supabaseAdmin
+        .from('votos_anonimos')
+        .select('candidate_id')
+        .range(from, to);
+
+      if (error) {
+        console.error('[SUPABASE] Error obteniendo escrutinio de votos:', error?.message);
+        break;
       }
-    });
+
+      if (!data || data.length === 0) {
+        hasMore = false;
+        break;
+      }
+
+      data.forEach((row: { candidate_id: string }) => {
+        const cid = String(row.candidate_id ?? '').trim();
+        if (cid) {
+          map.set(cid, (map.get(cid) ?? 0) + 1);
+        }
+      });
+
+      if (data.length < BATCH_SIZE) {
+        hasMore = false;
+      } else {
+        page++;
+      }
+    }
 
     return map;
   } catch (err) {

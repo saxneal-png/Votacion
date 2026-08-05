@@ -5,7 +5,7 @@ import { getCandidatosAsync, getEstamentoVariants } from '@/lib/candidates-store
 import { getAllPadronRecordsAsync, getAllSchoolsAsync } from '@/lib/padron-store';
 import { getSchoolsMasterAsync } from '@/lib/schools-master-store';
 import { getVotingRecordsAsync } from '@/lib/voting-record-store';
-import { getSchoolsVoted, getVoteTalliesAsync } from '@/lib/metrics-store';
+import { getVoteTalliesAsync } from '@/lib/metrics-store';
 import {
   ADMIN_SESSION_COOKIE,
   addAuditEntry,
@@ -43,13 +43,13 @@ export async function GET(request: NextRequest) {
   // 1. Obtener candidatos actualizados (Supabase / Store)
   const allCandidates = await getCandidatosAsync({ estamento: 'ALL' });
 
-  // 2. Obtener padrón oficial de votantes sin truncamiento de 1.000 filas (Paginación por lotes)
+  // 2. Obtener padrón oficial sin truncamiento (paginación por lotes de 1.000 filas)
   const { records: padronRecords, total: totalPadronCount } = await getAllPadronRecordsAsync({
     rbd: schoolId,
     slepId,
   });
 
-  // 3. Obtener actas oficiales de voto (Supabase / Store)
+  // 3. Obtener actas oficiales de voto desde Supabase (usando supabaseAdmin, sin límite de RLS)
   const { records: rawVotingRecords } = await getVotingRecordsAsync();
   const votingRecords = rawVotingRecords.filter((v) => {
     if (schoolId !== 'ALL' && v.rbdEstablecimiento !== schoolId) return false;
@@ -57,7 +57,6 @@ export async function GET(request: NextRequest) {
   });
 
   const tallies = await getVoteTalliesAsync(slepId, schoolId);
-  const schoolsVotedMap = getSchoolsVoted(slepId);
 
   // ── Padrón totals por estamento ──────────────────────────────────────────
   const padron = {
@@ -81,7 +80,7 @@ export async function GET(request: NextRequest) {
     });
   }
 
-  // ── Votos totales emitidos por estamento (desde acta oficial) ────────────
+  // ── Votos totales emitidos por estamento (desde acta oficial Supabase) ───
   const votes = {
     total: votingRecords.length,
     directivos: 0,
@@ -91,6 +90,8 @@ export async function GET(request: NextRequest) {
     estudiantes: 0,
   };
 
+  // Construir mapa rbd → estamentos que votaron (desde acta_sufragio real)
+  const schoolsVotedRealMap = new Map<string, Set<string>>();
   votingRecords.forEach((v) => {
     const vars = getEstamentoVariants(v.estamento).map((val) => val.toLowerCase());
     if (vars.includes('directivos')) votes.directivos++;
@@ -98,6 +99,19 @@ export async function GET(request: NextRequest) {
     else if (vars.includes('asistentes')) votes.asistentes++;
     else if (vars.includes('apoderados')) votes.apoderados++;
     else if (vars.includes('estudiantes')) votes.estudiantes++;
+
+    // Registrar participación por RBD y estamento (fuente: Supabase real)
+    const rbd = v.rbdEstablecimiento?.trim();
+    const estNorm = vars.includes('directivos') ? 'directivos'
+      : vars.includes('docentes') ? 'docentes'
+      : vars.includes('asistentes') ? 'asistentes'
+      : vars.includes('apoderados') ? 'apoderados'
+      : vars.includes('estudiantes') ? 'estudiantes'
+      : null;
+    if (rbd && estNorm) {
+      if (!schoolsVotedRealMap.has(rbd)) schoolsVotedRealMap.set(rbd, new Set());
+      schoolsVotedRealMap.get(rbd)!.add(estNorm);
+    }
   });
 
   // ── Desglose por estamento y sus candidaturas vinculadas ───────────────────
@@ -133,20 +147,25 @@ export async function GET(request: NextRequest) {
     };
   });
 
-  // ── Escuelas Reales del Padrón y Catálogo Maestro ────────────────────────
+  // ── Escuelas: fuente de verdad = Catálogo Maestro (131 RBDs) + bd_padron ──
   const realSchoolsList = await getAllSchoolsAsync();
   const masterSchoolsList = await getSchoolsMasterAsync();
 
   const realSchoolsMap = new Map<string, { rbd: string; name: string }>();
-  realSchoolsList.forEach((s) => realSchoolsMap.set(s.rbd, { rbd: s.rbd, name: s.nombre }));
+  // Priorizar catálogo maestro (131 colegios oficiales) sobre bd_padron
   masterSchoolsList.forEach((s) => {
+    if (s.rbd) realSchoolsMap.set(s.rbd, { rbd: s.rbd, name: s.nombreOficial });
+  });
+  // Complementar con establecimientos del padrón que no estén en el maestro
+  realSchoolsList.forEach((s) => {
     if (!realSchoolsMap.has(s.rbd)) {
-      realSchoolsMap.set(s.rbd, { rbd: s.rbd, name: s.nombreOficial });
+      realSchoolsMap.set(s.rbd, { rbd: s.rbd, name: s.nombre });
     }
   });
 
   const schools: SchoolResult[] = Array.from(realSchoolsMap.values()).map((s) => {
-    const votedSet = schoolsVotedMap.get(s.rbd);
+    // Usar mapa construido desde acta_sufragio (Supabase real) para determinar participación
+    const votedSet = schoolsVotedRealMap.get(s.rbd);
 
     const schoolPadron = {
       directivos: 0,

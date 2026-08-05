@@ -1,11 +1,11 @@
 import { cookies } from 'next/headers';
 import { type NextRequest, NextResponse } from 'next/server';
 
-import { getCandidatos, getCandidatosAsync, getEstamentoVariants } from '@/lib/candidates-store';
+import { getCandidatosAsync, getEstamentoVariants } from '@/lib/candidates-store';
 import { getAllPadronRecordsAsync, getAllSchoolsAsync, getPadronRecords, type PadronRecord } from '@/lib/padron-store';
 import { getSchoolsMasterAsync } from '@/lib/schools-master-store';
 import { getVotingRecords, getVotingRecordsAsync, type VotingRecordEntry } from '@/lib/voting-record-store';
-import { getSchoolsVoted, getVoteTalliesAsync } from '@/lib/metrics-store';
+import { getVoteTalliesAsync } from '@/lib/metrics-store';
 import { getElectionConfigAsync } from '@/lib/election-config-store';
 import { formatChileDateTime } from '@/lib/chile-time';
 import {
@@ -61,18 +61,8 @@ export async function GET(request: NextRequest) {
     const config = await getElectionConfigAsync();
     const nowChile = formatChileDateTime(new Date());
 
-    // 2. Candidatos y Padrón Electoral
-    let allCandidates: Candidate[] = getCandidatos({ estamento: 'ALL' });
-    if (allCandidates.length === 0) {
-      try {
-        const fetched = await getCandidatosAsync({ estamento: 'ALL' }).catch(() => []);
-        if (fetched && fetched.length > 0) {
-          allCandidates = fetched;
-        }
-      } catch {
-        // Fallback en entornos sin unstable_cache
-      }
-    }
+    // 2. Candidatos y Padrón Electoral (siempre desde Supabase)
+    const allCandidates = await getCandidatosAsync({ estamento: 'ALL' }).catch(() => []);
 
     let padronRecords: PadronRecord[] = [];
     let totalPadronCount = 0;
@@ -105,7 +95,23 @@ export async function GET(request: NextRequest) {
     }
 
     const tallies = await getVoteTalliesAsync().catch(() => new Map<string, number>());
-    const schoolsVotedMap = getSchoolsVoted();
+
+    // Construir mapa rbd -> estamentos que votaron desde acta_sufragio real
+    const schoolsVotedRealMap = new Map<string, Set<string>>();
+    votingRecords.forEach((v) => {
+      const vars = getEstamentoVariants(v.estamento).map((val) => val.toLowerCase());
+      const estNorm = vars.includes('directivos') ? 'directivos'
+        : vars.includes('docentes') ? 'docentes'
+        : vars.includes('asistentes') ? 'asistentes'
+        : vars.includes('apoderados') ? 'apoderados'
+        : vars.includes('estudiantes') ? 'estudiantes'
+        : null;
+      const rbd = v.rbdEstablecimiento?.trim();
+      if (rbd && estNorm) {
+        if (!schoolsVotedRealMap.has(rbd)) schoolsVotedRealMap.set(rbd, new Set());
+        schoolsVotedRealMap.get(rbd)!.add(estNorm);
+      }
+    });
 
     // 3. Totales globales de padrón
     const padron = {
@@ -211,11 +217,12 @@ export async function GET(request: NextRequest) {
     const realSchoolsList = await getAllSchoolsAsync().catch(() => []);
     const masterSchoolsList = await getSchoolsMasterAsync().catch(() => []);
     const realSchoolsMap = new Map<string, { rbd: string; name: string }>();
-    realSchoolsList.forEach((s) => realSchoolsMap.set(s.rbd, { rbd: s.rbd, name: s.nombre }));
+    // Catálogo maestro tiene prioridad (131 colegios oficiales)
     masterSchoolsList.forEach((s) => {
-      if (!realSchoolsMap.has(s.rbd)) {
-        realSchoolsMap.set(s.rbd, { rbd: s.rbd, name: s.nombreOficial });
-      }
+      if (s.rbd) realSchoolsMap.set(s.rbd, { rbd: s.rbd, name: s.nombreOficial });
+    });
+    realSchoolsList.forEach((s) => {
+      if (!realSchoolsMap.has(s.rbd)) realSchoolsMap.set(s.rbd, { rbd: s.rbd, name: s.nombre });
     });
 
     lines.push('================================================================================');
@@ -224,7 +231,7 @@ export async function GET(request: NextRequest) {
     lines.push('RBD;Nombre del Establecimiento;Docentes Votaron;Asistentes Votaron;Apoderados Votaron;Directivos Votaron');
 
     Array.from(realSchoolsMap.values()).forEach((s) => {
-      const votedSet = schoolsVotedMap.get(s.rbd);
+      const votedSet = schoolsVotedRealMap.get(s.rbd);
       const docVoted = votedSet?.has('docentes') ? 'SÍ' : 'NO';
       const asisVoted = votedSet?.has('asistentes') ? 'SÍ' : 'NO';
       const apodVoted = votedSet?.has('apoderados') ? 'SÍ' : 'NO';
