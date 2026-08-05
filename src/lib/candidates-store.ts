@@ -382,14 +382,16 @@ export async function deleteCandidatoAsync(id: string): Promise<boolean> {
       }
       throw new Error(`Error al eliminar candidato en Supabase: ${error.message}`);
     }
-    console.log('[SUPABASE] Candidato eliminado de Supabase:', id);
+    console.log('[SUPABASE] Candidato procesado para eliminación en Supabase:', id);
   }
 
-  const deleted = deleteCandidato(id);
-  if (deleted) {
-    revalidateCandidatesCache();
-  }
-  return deleted;
+  // Eliminar de la memoria local si estaba presente
+  deleteCandidato(id);
+
+  // Revalidar caché de candidaturas
+  revalidateCandidatesCache();
+
+  return true;
 }
 
 /**

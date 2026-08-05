@@ -124,12 +124,8 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ message: 'Se requiere el id del candidato a eliminar.' }, { status: 400 });
     }
 
-    const deleted = await deleteCandidatoAsync(id);
-    if (!deleted) {
-      return NextResponse.json({ message: 'No se encontró el candidato especificado.' }, { status: 404 });
-    }
-
-    return NextResponse.json({ success: true });
+    await deleteCandidatoAsync(id);
+    return NextResponse.json({ success: true, message: 'Candidato eliminado exitosamente.' });
   } catch (error) {
     return NextResponse.json(
       { message: error instanceof Error ? error.message : 'Error al eliminar candidato.' },
