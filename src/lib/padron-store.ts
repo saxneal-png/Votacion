@@ -789,10 +789,9 @@ export async function getAllSchoolsAsync(): Promise<SchoolFilterOption[]> {
   }
 
   // 2. Consulta DISTINCT a bd_padron para capturar RBDs no presentes en el maestro
-  //    Una sola query eficiente independientemente del tamaño de la tabla
   try {
-    // Paginación por lotes de 2.000 para obtener todos los RBDs únicos
-    const BATCH = 2000;
+    // Paginación por lotes de 1.000 (respetando el límite por defecto de PostgREST)
+    const BATCH = 1000;
     let page = 0;
     let hasMore = true;
 
@@ -813,8 +812,6 @@ export async function getAllSchoolsAsync(): Promise<SchoolFilterOption[]> {
         if (rbd && nombre && !map.has(rbd)) map.set(rbd, nombre);
       });
 
-      // Si ya tenemos todos los RBDs del maestro y la bd_padron solo añade
-      // colegios del mismo set, podemos parar cuando la paginación no añade nuevos.
       if (data.length < BATCH) { hasMore = false; } else { page++; }
     }
   } catch (err) {

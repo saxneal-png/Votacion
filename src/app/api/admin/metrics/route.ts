@@ -169,12 +169,21 @@ export async function GET(request: NextRequest) {
     };
   });
 
-  // ── Escuelas: getAllSchoolsAsync ya fusiona maestro + bd_padron con paginación completa ──
+  // ── Escuelas: getAllSchoolsAsync + padronRecords cargado ──
   const allSchoolsList = await getAllSchoolsAsync();
 
   const realSchoolsMap = new Map<string, { rbd: string; name: string }>();
   allSchoolsList.forEach((s) => {
     if (s.rbd) realSchoolsMap.set(s.rbd, { rbd: s.rbd, name: s.nombre });
+  });
+
+  // Agregar además cualquier RBD presente en el padrón cargado
+  padronRecords.forEach((p) => {
+    const rbd = String(p.rbdEstablecimiento || '').trim();
+    const name = String(p.nombreEstablecimiento || '').trim();
+    if (rbd && !realSchoolsMap.has(rbd)) {
+      realSchoolsMap.set(rbd, { rbd, name: name || `Establecimiento RBD ${rbd}` });
+    }
   });
 
   const schools: SchoolResult[] = Array.from(realSchoolsMap.values()).map((s) => {
