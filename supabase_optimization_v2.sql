@@ -289,6 +289,13 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 -- 5. POLÍTICAS RLS (ROW LEVEL SECURITY) Y SEGURIDAD
 -- ----------------------------------------------------------------------------
 
+-- Otorga permisos de lectura explícitos a los roles anónimo, autenticado y público
+GRANT SELECT ON bd_establecimientos_maestro TO anon, authenticated, service_role, public;
+GRANT SELECT ON bd_padron TO anon, authenticated, service_role, public;
+GRANT SELECT ON candidatos TO anon, authenticated, service_role, public;
+GRANT SELECT ON bd_configuracion_eleccion TO anon, authenticated, service_role, public;
+GRANT SELECT ON vista_dashboard_escuelas TO anon, authenticated, service_role, public;
+
 ALTER TABLE bd_padron ENABLE ROW LEVEL SECURITY;
 ALTER TABLE votos_anonimos ENABLE ROW LEVEL SECURITY;
 ALTER TABLE acta_sufragio ENABLE ROW LEVEL SECURITY;
@@ -298,10 +305,10 @@ ALTER TABLE candidatos ENABLE ROW LEVEL SECURITY;
 
 -- Lectura pública para la UI de consulta de votantes y catálogo
 DROP POLICY IF EXISTS "Lectura pública de padrón" ON bd_padron;
-CREATE POLICY "Lectura pública de padrón" ON bd_padron FOR SELECT USING (true);
+CREATE POLICY "Lectura pública de padrón" ON bd_padron FOR SELECT TO public USING (true);
 
 DROP POLICY IF EXISTS "Lectura pública de catálogo maestro" ON bd_establecimientos_maestro;
-CREATE POLICY "Lectura pública de catálogo maestro" ON bd_establecimientos_maestro FOR SELECT USING (true);
+CREATE POLICY "Lectura pública de catálogo maestro" ON bd_establecimientos_maestro FOR SELECT TO public USING (true);
 
 DROP POLICY IF EXISTS "Lectura pública de candidatos" ON candidatos;
 CREATE POLICY "Lectura pública de candidatos" ON candidatos FOR SELECT USING (true);

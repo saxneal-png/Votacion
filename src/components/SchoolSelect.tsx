@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
+import { supabaseClient } from '@/lib/supabase-client';
 
 export interface SchoolOption {
   rbd: string;
@@ -25,10 +26,46 @@ export function SchoolSelect({
 }: SchoolSelectProps) {
   const [schools, setSchools] = useState<SchoolOption[]>([]);
   const [loading, setLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   useEffect(() => {
     let isMounted = true;
+
     async function loadSchools() {
+      if (isMounted) {
+        setLoading(true);
+        setErrorMessage(null);
+      }
+
+      // 1. Intento primario: Consulta directa con cliente Supabase anónimo (público)
+      try {
+        const { data, error } = await supabaseClient
+          .from('bd_establecimientos_maestro')
+          .select('rbd, nombre_oficial, comuna')
+          .order('nombre_oficial', { ascending: true });
+
+        if (!error && data && data.length > 0) {
+          if (isMounted) {
+            setSchools(
+              data.map((item: Record<string, unknown>) => ({
+                rbd: String(item.rbd || '').trim(),
+                nombre_oficial: String(item.nombre_oficial || item.nombreOficial || '').trim(),
+                comuna: item.comuna ? String(item.comuna).trim() : '',
+              })).filter((s) => s.rbd && s.nombre_oficial),
+            );
+            setLoading(false);
+          }
+          return;
+        }
+
+        if (error) {
+          console.warn('[SchoolSelect] Aviso Supabase anónimo:', error.message);
+        }
+      } catch (clientErr) {
+        console.warn('[SchoolSelect] Excepción cliente Supabase:', clientErr);
+      }
+
+      // 2. Intento secundario: Petición API backend /api/admin/schools-master
       try {
         const res = await fetch('/api/admin/schools-master', { credentials: 'same-origin' });
         if (res.ok) {
@@ -48,11 +85,14 @@ export function SchoolSelect({
             return;
           }
         }
-      } catch {
-        // Fallback a endpoint alternativo o lista vacía
+      } catch (apiErr) {
+        console.warn('[SchoolSelect] Excepción API escuelas:', apiErr);
       }
 
-      if (isMounted) setLoading(false);
+      if (isMounted) {
+        setLoading(false);
+        setErrorMessage('No se encontraron establecimientos en la base de datos (0 registros en catálogo maestro).');
+      }
     }
 
     void loadSchools();
@@ -60,6 +100,20 @@ export function SchoolSelect({
       isMounted = false;
     };
   }, []);
+
+  if (errorMessage && schools.length === 0) {
+    return (
+      <div className="p-3 bg-amber-50 border border-amber-200 text-amber-900 text-xs rounded-xl flex flex-col gap-1 font-medium">
+        <div className="font-bold flex items-center gap-1 text-amber-800">
+          <span>⚠️ Catálogo de Establecimientos:</span>
+        </div>
+        <span>{errorMessage}</span>
+        <span className="text-[10px] text-amber-700">
+          Tip: Si la base de datos está recién creada, ejecuta el script SQL <code>supabase_optimization_v2.sql</code> en Supabase o carga el archivo Excel en la pestaña Catálogo Maestro.
+        </span>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col gap-1 w-full">
@@ -85,7 +139,9 @@ export function SchoolSelect({
         className={`w-full h-10 px-3 text-xs font-medium rounded-xl border border-slate-300 bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#0b5294] focus:border-[#0b5294] transition ${className}`}
       >
         <option value="">
-          {loading ? 'Cargando 131 establecimientos...' : '-- Seleccione Colegio --'}
+          {loading
+            ? 'Cargando establecimientos...'
+            : `-- Seleccione Colegio (${schools.length} disponibles) --`}
         </option>
         {schools.map((school) => (
           <option key={school.rbd} value={school.rbd}>
