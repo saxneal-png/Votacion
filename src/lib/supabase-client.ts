@@ -14,7 +14,11 @@ const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || REAL_SERVICE
  * Cliente Supabase Anónimo para uso público/cliente
  */
 export const supabaseClient = createClient(supabaseUrl, supabaseAnonKey, {
-  auth: { persistSession: false },
+  auth: {
+    persistSession: false,
+    autoRefreshToken: false,
+    detectSessionInUrl: false,
+  },
 });
 
 /**
@@ -25,6 +29,7 @@ export const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
   auth: {
     persistSession: false,
     autoRefreshToken: false,
+    detectSessionInUrl: false,
   },
 });
 
