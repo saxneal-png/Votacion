@@ -111,17 +111,38 @@ SELECT
     m.rbd,
     m.nombre_oficial,
     m.comuna,
-    COUNT(p.rut_votante) AS total_padron,
-    COUNT(CASE WHEN p.ha_votado = TRUE THEN 1 END) AS total_votos_emitidos,
+    COUNT(DISTINCT p.rut_votante) AS total_padron_unicos,
+    COUNT(DISTINCT CASE WHEN p.ha_votado = TRUE THEN p.rut_votante END) AS total_votos_emitidos_unicos,
     CASE 
-        WHEN COUNT(p.rut_votante) > 0 
-        THEN ROUND((COUNT(CASE WHEN p.ha_votado = TRUE THEN 1 END)::NUMERIC / COUNT(p.rut_votante)::NUMERIC) * 100, 1)
+        WHEN COUNT(DISTINCT p.rut_votante) > 0 
+        THEN ROUND((COUNT(DISTINCT CASE WHEN p.ha_votado = TRUE THEN p.rut_votante END)::NUMERIC / COUNT(DISTINCT p.rut_votante)::NUMERIC) * 100, 1)
         ELSE 0 
     END AS porcentaje_participacion
 FROM bd_establecimientos_maestro m
-LEFT JOIN bd_padron p ON TRIM(m.rbd) = TRIM(p.rbd_establecimiento)
+LEFT JOIN bd_padron p ON TRIM(m.rbd) = TRIM(p.rbd_establecimiento) AND p.habilitado = TRUE
 GROUP BY m.rbd, m.nombre_oficial, m.comuna
 ORDER BY m.rbd ASC;
+
+-- Función RPC para conteo de electores únicos del territorio
+CREATE OR REPLACE FUNCTION obtener_resumen_padron_unico()
+RETURNS TABLE (
+  total_electores_unicos BIGINT,
+  total_votaron_unicos BIGINT,
+  porcentaje_participacion NUMERIC
+) AS $$
+BEGIN
+  RETURN QUERY
+  SELECT 
+    COUNT(DISTINCT rut_votante) AS total_electores_unicos,
+    COUNT(DISTINCT CASE WHEN ha_votado = TRUE THEN rut_votante END) AS total_votaron_unicos,
+    ROUND(
+      (COUNT(DISTINCT CASE WHEN ha_votado = TRUE THEN rut_votante END)::DECIMAL / 
+      NULLIF(COUNT(DISTINCT rut_votante), 0)) * 100, 1
+    ) AS porcentaje_participacion
+  FROM bd_padron
+  WHERE habilitado = TRUE;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- ----------------------------------------------------------------------------
 -- 4. PROCEDIMIENTO ALMACENADO ATÓMICO (RPC): EMISIÓN DE VOTO MULTIRROL

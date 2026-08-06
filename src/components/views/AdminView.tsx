@@ -8,6 +8,7 @@ import { cleanAndValidateRUT } from '@/lib/rut-validator';
 import type { VotingRecordEntry } from '@/lib/voting-record-store';
 import { formatChileDateTime } from '@/lib/chile-time';
 import type { ElectionConfig, ElectionStatusCheck, EstamentoCodigo, EstadoEleccion } from '@/lib/election-config-store';
+import { SchoolSelect } from '@/components/SchoolSelect';
 
 interface AdminViewProps {
   metrics: AdminMetrics;
@@ -2637,31 +2638,19 @@ CMD ["npm", "start"]`}
                 />
               </label>
 
-              <div className="grid grid-cols-2 gap-2">
-                <label className="grid gap-1 font-bold text-slate-700">
-                  <span>RBD Colegio</span>
-                  <input
-                    type="text"
-                    className="h-10 px-3 rounded-xl border border-slate-300 font-mono"
-                    placeholder="10202"
-                    value={newRbd}
-                    onChange={(e) => setNewRbd(e.target.value)}
-                    required
-                  />
-                </label>
-
-                <label className="grid gap-1 font-bold text-slate-700">
-                  <span>Nombre Colegio</span>
-                  <input
-                    type="text"
-                    className="h-10 px-3 rounded-xl border border-slate-300 font-sans"
-                    placeholder="Escuela Martín Prado"
-                    value={newNombreColegio}
-                    onChange={(e) => setNewNombreColegio(e.target.value)}
-                    required
-                  />
-                </label>
-              </div>
+              <SchoolSelect
+                selectedRbd={newRbd}
+                onSchoolSelect={({ rbd, nombre_oficial }) => {
+                  setNewRbd(rbd);
+                  setNewNombreColegio(nombre_oficial);
+                }}
+              />
+              {newRbd ? (
+                <div className="p-2 bg-blue-50 text-blue-800 text-[11px] rounded-xl border border-blue-200 flex items-center justify-between font-medium">
+                  <span><strong>RBD Asignado:</strong> {newRbd}</span>
+                  <span><strong>Colegio:</strong> {newNombreColegio}</span>
+                </div>
+              ) : null}
 
               {addVoterError ? (
                 <div className="p-2.5 rounded-xl bg-red-50 text-red-700 font-semibold border border-red-200">
@@ -2724,7 +2713,7 @@ CMD ["npm", "start"]`}
                 />
               </label>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <label className="grid gap-1 font-bold text-slate-700">
                   <span>Estamento *</span>
                   <select
@@ -2739,31 +2728,15 @@ CMD ["npm", "start"]`}
                     <option value="estudiantes">Estudiantes</option>
                   </select>
                 </label>
-
-                <label className="grid gap-1 font-bold text-slate-700">
-                  <span>RBD Colegio *</span>
-                  <input
-                    type="text"
-                    className="h-10 px-3 rounded-xl border border-slate-300 font-mono"
-                    placeholder="Ej: 10202"
-                    value={formCandRbd}
-                    onChange={(e) => handleRbdChange(e.target.value)}
-                    required
-                  />
-                </label>
-
-                <label className="grid gap-1 font-bold text-slate-700">
-                  <span>Nombre Colegio (Auto) *</span>
-                  <input
-                    type="text"
-                    className="h-10 px-3 rounded-xl border border-slate-300 font-sans bg-slate-50 focus:bg-white"
-                    placeholder="Auto por RBD"
-                    value={formCandEscuela}
-                    onChange={(e) => setFormCandEscuela(e.target.value)}
-                    required
-                  />
-                </label>
               </div>
+
+              <SchoolSelect
+                selectedRbd={formCandRbd}
+                onSchoolSelect={({ rbd, nombre_oficial }) => {
+                  setFormCandRbd(rbd);
+                  setFormCandEscuela(nombre_oficial);
+                }}
+              />
 
 
               <label className="grid gap-1 font-bold text-slate-700">

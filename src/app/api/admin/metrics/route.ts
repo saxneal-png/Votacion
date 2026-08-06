@@ -75,7 +75,10 @@ export async function GET(request: NextRequest) {
   };
 
   if (padronRecords.length > 0) {
-    padron.total = totalPadronCount || padronRecords.length;
+    const uniqueRuts = new Set(
+      padronRecords.map((p) => p.rutVotante.replace(/[^0-9kK]/g, '').toUpperCase()),
+    );
+    padron.total = uniqueRuts.size || totalPadronCount || padronRecords.length;
     padronRecords.forEach((p) => {
       const vars = getEstamentoVariants(p.estamento).map((v) => v.toLowerCase());
       if (vars.includes('directivos')) padron.directivos++;
