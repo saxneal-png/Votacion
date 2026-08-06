@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { supabaseClient } from '@/lib/supabase-client';
 
 export interface SchoolOption {
   rbd: string;
@@ -37,85 +36,59 @@ export function SchoolSelect({
         setErrorMessage(null);
       }
 
-      // 1. Intento primario: Peticion API backend /api/schools-master (origen self, inmune a CSP)
       try {
-        const res = await fetch('/api/schools-master', { credentials: 'same-origin' });
-        if (res.ok) {
-          const data = (await res.json()) as Record<string, unknown>;
-          const list = (data.records || data.schools || data.data) as Array<Record<string, unknown>> | undefined;
-          if (isMounted && list && Array.isArray(list) && list.length > 0) {
-            const formatted = list
-              .map((s) => ({
-                rbd: String(s.rbd || s.RBD || '').trim(),
-                nombre_oficial: String(s.nombreOficial || s.nombre_oficial || s.nombre || '').trim(),
-                comuna: s.comuna ? String(s.comuna).trim() : '',
-              }))
-              .filter((s) => s.rbd && s.nombre_oficial);
+        // Petición a la API interna de Next.js (cumple 'self' en CSP)
+        let response = await fetch('/api/admin/schools-master', { credentials: 'same-origin' });
+        if (!response.ok) {
+          response = await fetch('/api/schools-master', { credentials: 'same-origin' });
+        }
 
-            setSchools(formatted);
-            setLoading(false);
-            return;
+        if (!response.ok) {
+          throw new Error(`Error de servidor (${response.status}) al obtener el listado de colegios.`);
+        }
+
+        const result = (await response.json()) as unknown;
+        let list: Array<Record<string, unknown>> = [];
+
+        if (Array.isArray(result)) {
+          list = result as Array<Record<string, unknown>>;
+        } else if (result && typeof result === 'object') {
+          const resObj = result as Record<string, unknown>;
+          if (Array.isArray(resObj.records)) {
+            list = resObj.records as Array<Record<string, unknown>>;
+          } else if (Array.isArray(resObj.schools)) {
+            list = resObj.schools as Array<Record<string, unknown>>;
+          } else if (Array.isArray(resObj.data)) {
+            list = resObj.data as Array<Record<string, unknown>>;
           }
         }
-      } catch (apiErr) {
-        console.warn('[SchoolSelect] Excepcion API /api/schools-master:', apiErr);
-      }
 
-      // 2. Intento secundario: Consulta directa con cliente Supabase anónimo (público)
-      try {
-        const { data, error } = await supabaseClient
-          .from('bd_establecimientos_maestro')
-          .select('rbd, nombre_oficial, comuna')
-          .order('nombre_oficial', { ascending: true });
-
-        if (!error && data && data.length > 0) {
+        if (!list || list.length === 0) {
           if (isMounted) {
-            setSchools(
-              data.map((item: Record<string, unknown>) => ({
-                rbd: String(item.rbd || '').trim(),
-                nombre_oficial: String(item.nombre_oficial || item.nombreOficial || '').trim(),
-                comuna: item.comuna ? String(item.comuna).trim() : '',
-              })).filter((s) => s.rbd && s.nombre_oficial),
-            );
+            setErrorMessage('No se encontraron colegios en la base de datos (0 registros en catálogo maestro).');
             setLoading(false);
           }
           return;
         }
 
-        if (error) {
-          console.warn('[SchoolSelect] Aviso Supabase anónimo:', error.message);
+        const formatted = list
+          .map((s) => ({
+            rbd: String(s.rbd || s.RBD || '').trim(),
+            nombre_oficial: String(s.nombreOficial || s.nombre_oficial || s.nombre || '').trim(),
+            comuna: s.comuna ? String(s.comuna).trim() : '',
+          }))
+          .filter((s) => s.rbd && s.nombre_oficial);
+
+        if (isMounted) {
+          setSchools(formatted);
+          setLoading(false);
         }
-      } catch (clientErr) {
-        console.warn('[SchoolSelect] Excepción cliente Supabase:', clientErr);
-      }
-
-      // 2. Intento secundario: Petición API backend /api/admin/schools-master
-      try {
-        const res = await fetch('/api/admin/schools-master', { credentials: 'same-origin' });
-        if (res.ok) {
-          const data = (await res.json()) as Record<string, unknown>;
-          const list = (data.records || data.schools || data.data) as Array<Record<string, unknown>> | undefined;
-          if (isMounted && list && Array.isArray(list) && list.length > 0) {
-            const formatted = list
-              .map((s) => ({
-                rbd: String(s.rbd || s.RBD || '').trim(),
-                nombre_oficial: String(s.nombreOficial || s.nombre_oficial || s.nombre || '').trim(),
-                comuna: s.comuna ? String(s.comuna).trim() : '',
-              }))
-              .filter((s) => s.rbd && s.nombre_oficial);
-
-            setSchools(formatted);
-            setLoading(false);
-            return;
-          }
+      } catch (err) {
+        console.error('[SchoolSelect] Error al cargar establecimientos:', err);
+        if (isMounted) {
+          setErrorMessage(err instanceof Error ? err.message : 'Error de conexión');
+          setLoading(false);
         }
-      } catch (apiErr) {
-        console.warn('[SchoolSelect] Excepción API escuelas:', apiErr);
-      }
-
-      if (isMounted) {
-        setLoading(false);
-        setErrorMessage('No se encontraron establecimientos en la base de datos (0 registros en catálogo maestro).');
       }
     }
 
@@ -133,7 +106,7 @@ export function SchoolSelect({
         </div>
         <span>{errorMessage}</span>
         <span className="text-[10px] text-amber-700">
-          Tip: Si la base de datos está recién creada, ejecuta el script SQL <code>supabase_optimization_v2.sql</code> en Supabase o carga el archivo Excel en la pestaña Catálogo Maestro.
+          Tip: Carga el archivo Excel en la pestaña Catálogo Maestro de la Administración o ejecuta el script SQL <code>supabase_optimization_v2.sql</code>.
         </span>
       </div>
     );
@@ -142,7 +115,7 @@ export function SchoolSelect({
   return (
     <div className="flex flex-col gap-1 w-full">
       <label className="block text-xs font-bold text-slate-700 uppercase mb-0.5">
-        Establecimiento Educacional (Catálogo Maestro SLEP)
+        Establecimiento Educacional (131 Escuelas SLEP)
       </label>
       <select
         value={selectedRbd}

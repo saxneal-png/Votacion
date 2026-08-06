@@ -1,4 +1,4 @@
-import { createClient } from '@supabase/supabase-js';
+import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
 const REAL_SUPABASE_URL = 'https://wpfbfvkfcpslxfgppsig.supabase.co';
 const REAL_ANON_KEY =
@@ -10,28 +10,36 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || REAL_SUPABASE_URL;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || REAL_ANON_KEY;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || REAL_SERVICE_KEY;
 
-/**
- * Cliente Supabase Anónimo para uso público/cliente
- */
-export const supabaseClient = createClient(supabaseUrl, supabaseAnonKey, {
-  auth: {
-    persistSession: false,
-    autoRefreshToken: false,
-    detectSessionInUrl: false,
-  },
-});
+// Singleton global para evitar "Multiple GoTrueClient instances detected"
+const globalForSupabase = globalThis as unknown as {
+  __supabaseClient?: SupabaseClient;
+  __supabaseAdmin?: SupabaseClient;
+};
 
-/**
- * Cliente Supabase de Administración (Servidor / Service Role Key)
- * Usado exclusivamente en las API Routes server-side para saltarse RLS.
- */
-export const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
-  auth: {
-    persistSession: false,
-    autoRefreshToken: false,
-    detectSessionInUrl: false,
-  },
-});
+export const supabaseClient: SupabaseClient =
+  globalForSupabase.__supabaseClient ??
+  createClient(supabaseUrl, supabaseAnonKey, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+      detectSessionInUrl: false,
+    },
+  });
+
+export const supabaseAdmin: SupabaseClient =
+  globalForSupabase.__supabaseAdmin ??
+  createClient(supabaseUrl, supabaseServiceKey, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+      detectSessionInUrl: false,
+    },
+  });
+
+if (process.env.NODE_ENV !== 'production') {
+  globalForSupabase.__supabaseClient = supabaseClient;
+  globalForSupabase.__supabaseAdmin = supabaseAdmin;
+}
 
 /**
  * Interface para el registro de votante en el Padrón Electoral
