@@ -32,15 +32,18 @@ export function SchoolSelect({
       try {
         const res = await fetch('/api/admin/schools-master', { credentials: 'same-origin' });
         if (res.ok) {
-          const data = (await res.json()) as { schools?: Array<{ rbd: string; nombreOficial: string; comuna?: string }> };
-          if (isMounted && data.schools && data.schools.length > 0) {
-            setSchools(
-              data.schools.map((s) => ({
-                rbd: s.rbd,
-                nombre_oficial: s.nombreOficial,
-                comuna: s.comuna,
-              })),
-            );
+          const data = (await res.json()) as Record<string, unknown>;
+          const list = (data.records || data.schools || data.data) as Array<Record<string, unknown>> | undefined;
+          if (isMounted && list && Array.isArray(list) && list.length > 0) {
+            const formatted = list
+              .map((s) => ({
+                rbd: String(s.rbd || s.RBD || '').trim(),
+                nombre_oficial: String(s.nombreOficial || s.nombre_oficial || s.nombre || '').trim(),
+                comuna: s.comuna ? String(s.comuna).trim() : '',
+              }))
+              .filter((s) => s.rbd && s.nombre_oficial);
+
+            setSchools(formatted);
             setLoading(false);
             return;
           }

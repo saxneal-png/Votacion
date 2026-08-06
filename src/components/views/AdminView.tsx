@@ -430,8 +430,8 @@ export function AdminView({
   const [newRutEstudiante, setNewRutEstudiante] = useState('');
   const [newNombre, setNewNombre] = useState('');
   const [newEstamento, setNewEstamento] = useState<EstamentoDecreto102>('PADRES_APODERADOS');
-  const [newRbd, setNewRbd] = useState('10202');
-  const [newNombreColegio, setNewNombreColegio] = useState('Escuela Martín Prado');
+  const [newRbd, setNewRbd] = useState('');
+  const [newNombreColegio, setNewNombreColegio] = useState('');
   const [addVoterError, setAddVoterError] = useState<string | null>(null);
   const [addVoterSuccess, setAddVoterSuccess] = useState(false);
 
