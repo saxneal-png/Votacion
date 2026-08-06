@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { getSchoolsMasterAsync } from '@/lib/schools-master-store';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET() {
   try {
     const records = await getSchoolsMasterAsync();
