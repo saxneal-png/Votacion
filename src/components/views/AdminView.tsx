@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import type { AdminAuditEntry, AdminMetrics, Candidate, Estamento } from '@/types';
 import type { EstamentoDecreto102, ExcelProcessingResult, PadronRecord, QuorumEstamentoStatus } from '@/lib/padron-store';
+import { parsePadronWorkbook, type ParsedPadronItem } from '@/lib/padron-parser';
 import type { ConnectionTestResult } from '@/lib/azure-m365-service';
 import { cleanAndValidateRUT } from '@/lib/rut-validator';
 import type { VotingRecordEntry } from '@/lib/voting-record-store';
@@ -171,6 +172,12 @@ export function AdminView({
   const [uploading, setUploading] = useState(false);
   const [uploadResult, setUploadResult] = useState<ExcelProcessingResult | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [uploadProgress, setUploadProgress] = useState<{
+    currentChunk: number;
+    totalChunks: number;
+    percent: number;
+    statusText: string;
+  } | null>(null);
 
   // Catálogo Maestro (RBD) State
   const [showSchoolsMasterModal, setShowSchoolsMasterModal] = useState(false);
@@ -451,6 +458,7 @@ export function AdminView({
   // Formulario Candidato
   const [formCandNombre, setFormCandNombre] = useState('');
   const [formCandEstamento, setFormCandEstamento] = useState<Estamento>('docentes');
+  const [formCandNumero, setFormCandNumero] = useState('');
   const [formCandRbd, setFormCandRbd] = useState('');
   const [formCandEscuela, setFormCandEscuela] = useState('');
   const [formCandBiografia, setFormCandBiografia] = useState('');
@@ -856,31 +864,96 @@ export function AdminView({
     setUploading(true);
     setUploadError(null);
     setUploadResult(null);
+    setUploadProgress({
+      currentChunk: 0,
+      totalChunks: 1,
+      percent: 0,
+      statusText: 'Leyendo y validando archivo Excel en el navegador...',
+    });
 
     try {
-      const formData = new FormData();
-      formData.append('file', uploadFile);
+      const buffer = await uploadFile.arrayBuffer();
+      
+      // Parsear archivo localmente en el cliente (soporta .xlsx y .xlsm)
+      const parsed = parsePadronWorkbook(buffer);
 
-      const res = await fetch('/api/admin/padron/upload', {
-        method: 'POST',
-        body: formData,
-        credentials: 'same-origin',
+      if (!parsed.records || parsed.records.length === 0) {
+        if (parsed.erroresDetalle.length > 0) {
+          setUploadError(`El archivo no contiene registros válidos. Se encontraron ${parsed.erroresDetalle.length} errores de validación.`);
+        } else {
+          setUploadError('El archivo Excel no contiene registros válidos para ingestar.');
+        }
+        return;
+      }
+
+      const CHUNK_SIZE = 1000;
+      const chunks: ParsedPadronItem[][] = [];
+      for (let i = 0; i < parsed.records.length; i += CHUNK_SIZE) {
+        chunks.push(parsed.records.slice(i, i + CHUNK_SIZE));
+      }
+
+      let totalInsertados = 0;
+      const acumuladosErrores = [...parsed.erroresDetalle];
+
+      for (let index = 0; index < chunks.length; index++) {
+        const chunk = chunks[index];
+        const currentBatchNum = index + 1;
+        const pct = Math.round((currentBatchNum / chunks.length) * 100);
+
+        setUploadProgress({
+          currentChunk: currentBatchNum,
+          totalChunks: chunks.length,
+          percent: pct,
+          statusText: `Cargando lote ${currentBatchNum} de ${chunks.length} (${chunk.length} registros)...`,
+        });
+
+        const res = await fetch('/api/admin/padron/upload-chunk', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            records: chunk,
+            chunkIndex: index,
+            totalChunks: chunks.length,
+          }),
+          credentials: 'same-origin',
+        });
+
+        const data = (await res.json()) as {
+          success?: boolean;
+          registrosInsertados?: number;
+          erroresDetalle?: Array<{ fila: number; rut?: string; motivo: string }>;
+          message?: string;
+        };
+
+        if (!res.ok || !data.success) {
+          throw new Error(data.message || `Error al procesar el lote ${currentBatchNum} de la ingesta.`);
+        }
+
+        totalInsertados += data.registrosInsertados || 0;
+        if (data.erroresDetalle && data.erroresDetalle.length > 0) {
+          acumuladosErrores.push(...data.erroresDetalle);
+        }
+      }
+
+      setUploadResult({
+        success: true,
+        totalFilas: parsed.totalFilasLeidas,
+        registrosInsertados: totalInsertados,
+        registrosRechazados: acumuladosErrores.length,
+        quorums: [],
+        erroresDetalle: acumuladosErrores,
       });
 
-      const data = (await res.json()) as ExcelProcessingResult & { message?: string };
-      if (!res.ok) {
-        setUploadError(data.message || 'Error al procesar el archivo Excel.');
-      } else {
-        setUploadResult(data);
-        void fetchPadron();
-        onRefresh();
-      }
+      void fetchPadron(1);
+      onRefresh();
     } catch (err) {
       setUploadError(err instanceof Error ? err.message : 'Error inesperado al subir archivo.');
     } finally {
       setUploading(false);
+      setUploadProgress(null);
     }
   }
+
 
   async function handleAddVoterManual(e: React.FormEvent) {
     e.preventDefault();
@@ -972,6 +1045,7 @@ export function AdminView({
     setEditingCandidate(null);
     setFormCandNombre('');
     setFormCandEstamento('docentes');
+    setFormCandNumero('');
     setFormCandRbd('');
     setFormCandEscuela('');
     setFormCandBiografia('');
@@ -986,6 +1060,7 @@ export function AdminView({
     setEditingCandidate(c);
     setFormCandNombre(c.nombreCompleto || c.name);
     setFormCandEstamento(c.estamento);
+    setFormCandNumero(c.numero !== undefined && c.numero !== null ? String(c.numero) : '');
     setFormCandRbd(c.rbd || '');
     setFormCandEscuela(c.escuelaEstablecimiento || c.role);
     setFormCandBiografia(c.biografia || '');
@@ -1013,10 +1088,13 @@ export function AdminView({
       const url = '/api/admin/candidatos';
       const method = isEdit ? 'PUT' : 'POST';
 
+      const parsedNum = formCandNumero.trim() !== '' ? parseInt(formCandNumero.trim(), 10) : null;
+
       const payload = {
         id: editingCandidate?.id,
         nombreCompleto: formCandNombre.trim(),
         estamento: formCandEstamento,
+        numero: parsedNum,
         rbd: formCandRbd.trim(),
         escuelaEstablecimiento: formCandEscuela.trim(),
         biografia: formCandBiografia.trim(),
@@ -1928,11 +2006,22 @@ az webapp config appsettings set --resource-group rg-slep-elecciones --name vota
                             <p className="text-xs text-slate-600 font-semibold truncate">
                               🏫 {c.escuelaEstablecimiento || c.role}
                             </p>
-                            <span
-                              className={`inline-block mt-1 px-2 py-0.5 rounded text-[10px] font-bold border ${badge.bg} ${badge.text}`}
-                            >
-                              {badge.label}
-                            </span>
+                            <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                              <span
+                                className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold border ${badge.bg} ${badge.text}`}
+                              >
+                                {badge.label}
+                              </span>
+                              {c.numero ? (
+                                <span className="inline-block px-2 py-0.5 rounded text-[10px] font-extrabold bg-blue-100 text-[#0b5294] border border-blue-200">
+                                  N° {c.numero} en papeleta
+                                </span>
+                              ) : (
+                                <span className="inline-block px-2 py-0.5 rounded text-[10px] font-semibold bg-slate-100 text-slate-500 border border-slate-200">
+                                  Sin N° asignado
+                                </span>
+                              )}
+                            </div>
                           </div>
                         </div>
 
@@ -2509,6 +2598,23 @@ CMD ["npm", "start"]`}
                 </label>
               </div>
 
+              {uploadProgress && (
+                <div className="p-4 rounded-2xl bg-blue-50/80 border border-blue-200 space-y-2">
+                  <div className="flex items-center justify-between text-xs font-bold text-blue-900">
+                    <span className="flex items-center gap-1.5 animate-pulse">
+                      <span>⚡</span> {uploadProgress.statusText}
+                    </span>
+                    <span>{uploadProgress.percent}%</span>
+                  </div>
+                  <div className="w-full bg-blue-200 h-2.5 rounded-full overflow-hidden">
+                    <div
+                      className="bg-[#0b5294] h-full transition-all duration-300 rounded-full"
+                      style={{ width: `${uploadProgress.percent}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+
               {uploadError && (
                 <div className="p-3 rounded-xl bg-red-50 text-red-700 text-xs font-semibold border border-red-200">
                   ⚠️ {uploadError}
@@ -2534,8 +2640,23 @@ CMD ["npm", "start"]`}
                       <span className="font-extrabold text-red-600">{uploadResult.registrosRechazados}</span>
                     </div>
                   </div>
+
+                  {uploadResult.erroresDetalle && uploadResult.erroresDetalle.length > 0 && (
+                    <div className="mt-2 p-2.5 bg-white rounded-lg border border-red-200 max-h-36 overflow-y-auto text-[11px] text-red-700 space-y-1">
+                      <span className="font-bold block text-slate-800">Detalle de rechazos ({uploadResult.erroresDetalle.length}):</span>
+                      {uploadResult.erroresDetalle.slice(0, 15).map((err, idx) => (
+                        <div key={idx} className="border-b border-red-100 pb-1">
+                          • Fila {err.fila} {err.rut ? `(RUT: ${err.rut})` : ''}: {err.motivo}
+                        </div>
+                      ))}
+                      {uploadResult.erroresDetalle.length > 15 && (
+                        <div className="text-slate-400 italic pt-1">... y {uploadResult.erroresDetalle.length - 15} observaciones más.</div>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
+
 
               <div className="flex justify-end gap-2 pt-2">
                 <button
@@ -2727,6 +2848,18 @@ CMD ["npm", "start"]`}
                     <option value="apoderados">Padres y Apoderados</option>
                     <option value="estudiantes">Estudiantes</option>
                   </select>
+                </label>
+
+                <label className="grid gap-1 font-bold text-slate-700">
+                  <span>N° Sorteo / Papeleta</span>
+                  <input
+                    type="number"
+                    min={1}
+                    className="h-10 px-3 rounded-xl border border-slate-300 font-sans"
+                    placeholder="Ej: 1, 2, 3..."
+                    value={formCandNumero}
+                    onChange={(e) => setFormCandNumero(e.target.value)}
+                  />
                 </label>
               </div>
 

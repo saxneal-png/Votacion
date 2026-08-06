@@ -21,6 +21,7 @@ export interface Candidate extends TenantContext {
   initials: string;
   accentColor: string;
   estamento: Estamento;
+  numero?: number;
   // Campos extendidos para Módulo Candidaturas
   nombreCompleto?: string;
   biografia?: string;
@@ -42,6 +43,7 @@ export interface CandidateResult {
   initials: string;
   accentColor: string;
   votes: number;
+  numero?: number;
 }
 
 export interface EstamentoResult {

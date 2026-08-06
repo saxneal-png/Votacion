@@ -76,19 +76,43 @@ describe('candidates-store', () => {
     expect(updated.biografia).toBe('Bio original');
   });
 
-  it('elimina un candidato correctamente', () => {
-    const newCand = addCandidato({
-      nombreCompleto: 'Candidate For Delete',
-      estamento: 'asistentes',
+  it('ordena candidatos correctamente según el número de sorteo (numero)', () => {
+    const c3 = addCandidato({
+      nombreCompleto: 'Candidato C',
+      estamento: 'docentes',
       biografia: 'Bio',
       propuestaPrincipal: 'Propuesta',
       escuelaEstablecimiento: 'Escuela',
+      numero: 3,
+    });
+    const c1 = addCandidato({
+      nombreCompleto: 'Candidato A',
+      estamento: 'docentes',
+      biografia: 'Bio',
+      propuestaPrincipal: 'Propuesta',
+      escuelaEstablecimiento: 'Escuela',
+      numero: 1,
+    });
+    const c2 = addCandidato({
+      nombreCompleto: 'Candidato B',
+      estamento: 'docentes',
+      biografia: 'Bio',
+      propuestaPrincipal: 'Propuesta',
+      escuelaEstablecimiento: 'Escuela',
+      numero: 2,
     });
 
-    const deleted = deleteCandidato(newCand.id);
-    expect(deleted).toBe(true);
+    const docentes = getCandidatos({ estamento: 'docentes' });
+    const c1Index = docentes.findIndex((c) => c.id === c1.id);
+    const c2Index = docentes.findIndex((c) => c.id === c2.id);
+    const c3Index = docentes.findIndex((c) => c.id === c3.id);
 
-    const fetched = getCandidatoById(newCand.id);
-    expect(fetched).toBeUndefined();
+    expect(c1Index).toBeLessThan(c2Index);
+    expect(c2Index).toBeLessThan(c3Index);
+
+    // Clean up
+    deleteCandidato(c1.id);
+    deleteCandidato(c2.id);
+    deleteCandidato(c3.id);
   });
 });

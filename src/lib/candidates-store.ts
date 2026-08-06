@@ -17,6 +17,7 @@ export interface CandidateFormData {
   propuestaPrincipal: string;
   escuelaEstablecimiento: string;
   fotoPerfil?: string;
+  numero?: number | null;
 }
 
 declare global {
@@ -68,6 +69,15 @@ export function getEstamentoVariants(estamento: string): string[] {
   return [estamento, estamento.toLowerCase(), estamento.toUpperCase()];
 }
 
+export function sortCandidates(list: Candidate[]): Candidate[] {
+  return [...list].sort((a, b) => {
+    const numA = a.numero ?? Number.MAX_SAFE_INTEGER;
+    const numB = b.numero ?? Number.MAX_SAFE_INTEGER;
+    if (numA !== numB) return numA - numB;
+    return (a.nombreCompleto || a.name || '').localeCompare(b.nombreCompleto || b.name || '');
+  });
+}
+
 /**
  * Obtener todos los candidatos con filtros opcionales
  */
@@ -96,7 +106,7 @@ export function getCandidatos({
     );
   }
 
-  return filtered;
+  return sortCandidates(filtered);
 }
 
 /**
@@ -151,6 +161,7 @@ export function addCandidato(data: CandidateFormData): Candidate {
     initials,
     accentColor,
     estamento: data.estamento,
+    numero: data.numero != null && !Number.isNaN(Number(data.numero)) ? Number(data.numero) : undefined,
     biografia: data.biografia.trim(),
     propuestaPrincipal: data.propuestaPrincipal.trim(),
     escuelaEstablecimiento: data.escuelaEstablecimiento.trim(),
@@ -175,6 +186,9 @@ export function updateCandidato(id: string, data: Partial<CandidateFormData>): C
   const updatedSchool = data.escuelaEstablecimiento ? data.escuelaEstablecimiento.trim() : existing.escuelaEstablecimiento || existing.role;
   const updatedPropuesta = data.propuestaPrincipal ? data.propuestaPrincipal.trim() : existing.propuestaPrincipal || existing.slogan;
   const updatedEstamento = data.estamento || existing.estamento;
+  const updatedNumero = data.numero !== undefined
+    ? (data.numero != null && !Number.isNaN(Number(data.numero)) ? Number(data.numero) : undefined)
+    : existing.numero;
 
   const updatedCandidate: Candidate = {
     ...existing,
@@ -184,6 +198,7 @@ export function updateCandidato(id: string, data: Partial<CandidateFormData>): C
     slogan: updatedPropuesta,
     initials: getInitials(updatedName),
     estamento: updatedEstamento,
+    numero: updatedNumero,
     biografia: data.biografia !== undefined ? data.biografia.trim() : existing.biografia,
     propuestaPrincipal: updatedPropuesta,
     escuelaEstablecimiento: updatedSchool,
@@ -212,6 +227,8 @@ export function deleteCandidato(id: string): boolean {
 // ===========================================================================
 
 function mapRowToCandidate(item: Record<string, unknown>): Candidate {
+  const rawNum = item.numero ?? item.numero_sorteo;
+  const parsedNum = rawNum !== undefined && rawNum !== null && rawNum !== '' ? Number(rawNum) : undefined;
   return {
     id: String(item.id ?? ''),
     name: String(item.nombre_completo ?? ''),
@@ -221,6 +238,7 @@ function mapRowToCandidate(item: Record<string, unknown>): Candidate {
     initials: String(item.iniciales ?? ''),
     accentColor: String(item.color_acento ?? '#0b5294'),
     estamento: String(item.estamento ?? '') as Estamento,
+    numero: parsedNum !== undefined && !Number.isNaN(parsedNum) ? parsedNum : undefined,
     biografia: String(item.biografia ?? ''),
     propuestaPrincipal: String(item.slogan_propuesta ?? ''),
     escuelaEstablecimiento: String(item.cargo_role ?? ''),
@@ -282,7 +300,7 @@ export async function getCandidatosAsync({
       );
     }
 
-    return results;
+    return sortCandidates(results);
   } catch (err) {
     console.error('[SUPABASE] Excepción al consultar candidatos:', err);
     return getCandidatos({ estamento, search });
@@ -305,6 +323,7 @@ export async function addCandidatoAsync(data: CandidateFormData): Promise<Candid
         iniciales: local.initials,
         color_acento: local.accentColor,
         estamento: local.estamento,
+        numero: local.numero ?? null,
         biografia: local.biografia || '',
         foto_perfil: local.fotoPerfil || null,
         votos_acumulados: 0,
@@ -338,6 +357,9 @@ export async function updateCandidatoAsync(id: string, data: Partial<CandidateFo
     if (data.escuelaEstablecimiento) updatePayload.cargo_role = data.escuelaEstablecimiento.trim();
     if (data.propuestaPrincipal) updatePayload.slogan_propuesta = data.propuestaPrincipal.trim();
     if (data.estamento) updatePayload.estamento = data.estamento;
+    if (data.numero !== undefined) {
+      updatePayload.numero = data.numero != null && !Number.isNaN(Number(data.numero)) ? Number(data.numero) : null;
+    }
     if (data.biografia !== undefined) updatePayload.biografia = data.biografia.trim();
     if (data.fotoPerfil !== undefined) updatePayload.foto_perfil = data.fotoPerfil.trim() || null;
 

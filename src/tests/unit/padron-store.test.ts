@@ -120,4 +120,28 @@ describe('padron-store', () => {
     expect(res.success).toBe(true);
     expect(res.registrosInsertados).toBeGreaterThanOrEqual(3);
   });
+
+  it('procesa correctamente ingesta en lotes (chunking) via processPadronChunkAsync', async () => {
+    const { processPadronChunkAsync } = await import('@/lib/padron-store');
+    const { parsePadronWorkbook } = await import('@/lib/padron-parser');
+
+    const wb = XLSX.utils.book_new();
+    const sheetData = [
+      ['R.U.N.', 'Nombres', 'Apellidos', 'Estamento', 'Escuela/Liceo', 'RBD'],
+      ['15.555.666-8', 'Laura', 'Gómez', 'DOCENTES', 'Escuela Central', '99999'],
+    ];
+
+    const ws = XLSX.utils.aoa_to_sheet(sheetData);
+    XLSX.utils.book_append_sheet(wb, ws, 'funcionarios');
+
+    const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+    const parsed = parsePadronWorkbook(buf);
+
+    expect(parsed.records.length).toBe(1);
+
+    const chunkRes = await processPadronChunkAsync(parsed.records);
+    expect(chunkRes.success).toBe(true);
+    expect(chunkRes.registrosInsertados).toBe(1);
+  });
 });
+

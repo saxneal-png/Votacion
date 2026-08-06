@@ -84,7 +84,13 @@ export function VotingView({
   const confirmButtonRef = useRef<HTMLButtonElement | null>(null);
   const cancelButtonRef = useRef<HTMLButtonElement | null>(null);
   const modalPanelRef = useRef<HTMLDivElement | null>(null);
-  const selectedCandidate = candidates.find((c) => c.id === selectedCandidateId) ?? null;
+  const sortedCandidates = [...candidates].sort((a, b) => {
+    const numA = a.numero ?? Number.MAX_SAFE_INTEGER;
+    const numB = b.numero ?? Number.MAX_SAFE_INTEGER;
+    if (numA !== numB) return numA - numB;
+    return (a.nombreCompleto || a.name || '').localeCompare(b.nombreCompleto || b.name || '');
+  });
+  const selectedCandidate = sortedCandidates.find((c) => c.id === selectedCandidateId) ?? null;
   const displayName = isPrivacyMode ? 'Participante' : voterName.split(/\s+/).filter(Boolean)[0] ?? voterName;
 
   function handleConfirmClick() {
@@ -192,7 +198,7 @@ export function VotingView({
 
       {/* Candidate grid */}
       <div className="grid grid-cols-2 gap-3">
-        {candidates.map((candidate) => {
+        {sortedCandidates.map((candidate) => {
           const isSelected = selectedCandidateId === candidate.id;
           return (
             <button
@@ -208,9 +214,16 @@ export function VotingView({
               disabled={hasExpired || isSubmitting}
               style={{ ['--accent' as string]: candidate.accentColor }}
             >
-              <span className="candidate-badge inline-grid place-items-center w-11 h-11 rounded-full text-[15px]">
-                {candidate.initials}
-              </span>
+              <div className="flex items-center justify-between gap-2">
+                <span className="candidate-badge inline-grid place-items-center w-11 h-11 rounded-full text-[15px]">
+                  {candidate.initials}
+                </span>
+                {candidate.numero ? (
+                  <span className="inline-flex items-center justify-center px-2.5 py-0.5 rounded-full text-xs font-black bg-[#0b5294] text-white shadow-sm tracking-wide">
+                    N° {candidate.numero}
+                  </span>
+                ) : null}
+              </div>
               <span className="text-[17px] font-bold text-ink font-serif leading-tight">
                 {candidate.name}
               </span>
@@ -280,7 +293,9 @@ export function VotingView({
                   {selectedCandidate.initials}
                 </span>
                 <div className="min-w-0">
-                  <p className="m-0 font-serif font-bold text-[16px] text-ink leading-tight">{selectedCandidate.name}</p>
+                  <p className="m-0 font-serif font-bold text-[16px] text-ink leading-tight">
+                    {selectedCandidate.numero ? `N° ${selectedCandidate.numero} - ` : ''}{selectedCandidate.name}
+                  </p>
                   <p className="m-0 mt-0.5 font-sans text-[11px] text-ink-muted leading-tight">{selectedCandidate.role}</p>
                 </div>
               </div>

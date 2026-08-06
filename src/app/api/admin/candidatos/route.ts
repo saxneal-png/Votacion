@@ -52,6 +52,7 @@ export async function POST(request: NextRequest) {
       propuestaPrincipal: body.propuestaPrincipal,
       escuelaEstablecimiento: body.escuelaEstablecimiento,
       fotoPerfil: body.fotoPerfil,
+      numero: body.numero != null && !Number.isNaN(Number(body.numero)) ? Number(body.numero) : null,
     });
 
     return NextResponse.json({ success: true, candidate: newCandidate });
@@ -83,6 +84,7 @@ export async function PUT(request: NextRequest) {
       propuestaPrincipal: body.propuestaPrincipal,
       escuelaEstablecimiento: body.escuelaEstablecimiento,
       fotoPerfil: body.fotoPerfil,
+      numero: body.numero !== undefined ? (body.numero != null && !Number.isNaN(Number(body.numero)) ? Number(body.numero) : null) : undefined,
     });
 
     return NextResponse.json({ success: true, candidate: updatedCandidate });

@@ -104,4 +104,14 @@ describe('VotingView', () => {
     renderVoting();
     expect(screen.getByText(/flujo verificado/i)).toBeInTheDocument();
   });
+
+  it('muestra el número de sorteo (N°) en la papeleta cuando está asignado', () => {
+    const candidatesWithNumber: Candidate[] = [
+      { id: 'c1', name: 'Ana Pérez', role: 'Docente', slogan: 'Slogan A', initials: 'AP', accentColor: '#c00', estamento: 'docentes', numero: 1 },
+      { id: 'c2', name: 'Luis Torres', role: 'Docente', slogan: 'Slogan B', initials: 'LT', accentColor: '#00c', estamento: 'docentes', numero: 2 },
+    ];
+    renderVoting({ candidates: candidatesWithNumber });
+    expect(screen.getByText('N° 1')).toBeInTheDocument();
+    expect(screen.getByText('N° 2')).toBeInTheDocument();
+  });
 });
