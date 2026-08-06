@@ -37,7 +37,31 @@ export function SchoolSelect({
         setErrorMessage(null);
       }
 
-      // 1. Intento primario: Consulta directa con cliente Supabase anónimo (público)
+      // 1. Intento primario: Peticion API backend /api/schools-master (origen self, inmune a CSP)
+      try {
+        const res = await fetch('/api/schools-master', { credentials: 'same-origin' });
+        if (res.ok) {
+          const data = (await res.json()) as Record<string, unknown>;
+          const list = (data.records || data.schools || data.data) as Array<Record<string, unknown>> | undefined;
+          if (isMounted && list && Array.isArray(list) && list.length > 0) {
+            const formatted = list
+              .map((s) => ({
+                rbd: String(s.rbd || s.RBD || '').trim(),
+                nombre_oficial: String(s.nombreOficial || s.nombre_oficial || s.nombre || '').trim(),
+                comuna: s.comuna ? String(s.comuna).trim() : '',
+              }))
+              .filter((s) => s.rbd && s.nombre_oficial);
+
+            setSchools(formatted);
+            setLoading(false);
+            return;
+          }
+        }
+      } catch (apiErr) {
+        console.warn('[SchoolSelect] Excepcion API /api/schools-master:', apiErr);
+      }
+
+      // 2. Intento secundario: Consulta directa con cliente Supabase anónimo (público)
       try {
         const { data, error } = await supabaseClient
           .from('bd_establecimientos_maestro')
