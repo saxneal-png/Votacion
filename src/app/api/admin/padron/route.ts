@@ -133,15 +133,8 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    const deleted = await deleteVoterRecordAsync(id);
-    if (!deleted) {
-      return NextResponse.json(
-        { message: 'No se encontró el registro para eliminar.' },
-        { status: 404 },
-      );
-    }
-
-    return NextResponse.json({ success: true });
+    await deleteVoterRecordAsync(id);
+    return NextResponse.json({ success: true, message: 'Registro de votante eliminado exitosamente.' });
   } catch (error) {
     return NextResponse.json(
       { message: error instanceof Error ? error.message : 'Error al eliminar registro.' },

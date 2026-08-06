@@ -1190,28 +1190,57 @@ export async function toggleVoterHabilitadoAsync(id: string): Promise<PadronReco
  * Eliminar votante en Supabase y en memoria
  */
 export async function deleteVoterRecordAsync(id: string): Promise<boolean> {
-  // Buscar el rut_votante antes de eliminar de memoria
-  const record = padronStore.find((r) => r.id === id);
-  const deleted = deleteVoterRecord(id);
+  const cleanId = (id || '').trim();
+  if (!cleanId) return false;
 
-  if (deleted && record) {
+  // 1. Eliminar directamente en Supabase si está disponible
+  if (supabaseAdmin) {
     try {
-      const { error } = await supabaseAdmin
-        .from('bd_padron')
-        .delete()
-        .eq('rut_votante', record.rutVotante);
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cleanId);
 
-      if (error) {
-        console.error('[SUPABASE] Error eliminando de bd_padron:', error.message);
+      let deleteError = null;
+      if (isUuid) {
+        // Si el id es UUID, intentar borrar por id primero
+        const { error } = await supabaseAdmin
+          .from('bd_padron')
+          .delete()
+          .eq('id', cleanId);
+        deleteError = error;
       } else {
-        console.log('[SUPABASE] Votante eliminado de bd_padron:', record.rutVotante);
+        // Si no es UUID (ej. es un RUT), borrar por rut_votante o formatted_rut_votante
+        const { error } = await supabaseAdmin
+          .from('bd_padron')
+          .delete()
+          .or(`rut_votante.eq.${cleanId},formatted_rut_votante.eq.${cleanId}`);
+        deleteError = error;
       }
+
+      if (deleteError) {
+        console.warn('[SUPABASE] Intento principal falló, probando eliminación or(id,rut_votante):', deleteError.message);
+        const { error: fallbackError } = await supabaseAdmin
+          .from('bd_padron')
+          .delete()
+          .or(`id.eq.${cleanId},rut_votante.eq.${cleanId}`);
+
+        if (fallbackError) {
+          console.error('[SUPABASE] Error eliminando de bd_padron:', fallbackError.message);
+          throw new Error(`Error al eliminar registro en Supabase: ${fallbackError.message}`);
+        }
+      }
+
+      console.log('[SUPABASE] Registro de votante procesado para eliminación en bd_padron:', cleanId);
     } catch (err) {
       console.error('[SUPABASE] Excepción al eliminar votante:', err);
+      if (err instanceof Error && err.message.includes('Supabase')) {
+        throw err;
+      }
     }
   }
 
-  return deleted;
+  // 2. Eliminar de la memoria local si existía en la instancia actual
+  deleteVoterRecord(cleanId);
+
+  return true;
 }
 
 /**
