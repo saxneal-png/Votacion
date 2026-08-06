@@ -18,28 +18,26 @@ const globalForSupabase = globalThis as unknown as {
 
 export const supabaseClient: SupabaseClient =
   globalForSupabase.__supabaseClient ??
-  createClient(supabaseUrl, supabaseAnonKey, {
+  (globalForSupabase.__supabaseClient = createClient(supabaseUrl, supabaseAnonKey, {
     auth: {
+      storageKey: 'sb-anon-auth-token',
       persistSession: false,
       autoRefreshToken: false,
       detectSessionInUrl: false,
     },
-  });
+  }));
 
 export const supabaseAdmin: SupabaseClient =
   globalForSupabase.__supabaseAdmin ??
-  createClient(supabaseUrl, supabaseServiceKey, {
+  (globalForSupabase.__supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
     auth: {
+      storageKey: 'sb-admin-auth-token',
       persistSession: false,
       autoRefreshToken: false,
       detectSessionInUrl: false,
     },
-  });
+  }));
 
-if (process.env.NODE_ENV !== 'production') {
-  globalForSupabase.__supabaseClient = supabaseClient;
-  globalForSupabase.__supabaseAdmin = supabaseAdmin;
-}
 
 /**
  * Interface para el registro de votante en el Padrón Electoral
