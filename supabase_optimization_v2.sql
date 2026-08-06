@@ -106,6 +106,8 @@ CREATE INDEX IF NOT EXISTS idx_establecimientos_maestro_rbd ON bd_establecimient
 -- 3. VISTA PARA DASHBOARD DE ESCUELAS (GARANTIZA 131 ESTABLECIMIENTOS)
 -- ----------------------------------------------------------------------------
 
+DROP VIEW IF EXISTS vista_dashboard_escuelas CASCADE;
+
 CREATE OR REPLACE VIEW vista_dashboard_escuelas AS
 SELECT 
     m.rbd,
