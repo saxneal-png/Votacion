@@ -1,6 +1,7 @@
 import * as XLSX from 'xlsx';
 import { cleanAndValidateRUT } from '@/lib/rut-validator';
-import { normalizeEstamentoDecreto102, type EstamentoDecreto102, type SchoolMasterRecord } from '@/lib/padron-store';
+import { normalizeEstamentoDecreto102, type EstamentoDecreto102 } from '@/lib/padron-store';
+import type { SchoolMasterRecord } from '@/lib/schools-master-store';
 
 export interface ParsedPadronItem {
   rutVotante: string;
