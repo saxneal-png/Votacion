@@ -137,47 +137,61 @@ CREATE OR REPLACE FUNCTION emitir_voto_atomico(
 )
 RETURNS JSONB AS $$
 DECLARE
-  v_already_voted BOOLEAN;
+  v_already_voted_acta BOOLEAN;
+  v_already_voted_padron BOOLEAN;
   v_habilitado BOOLEAN;
   v_folio TEXT;
   v_receipt_code TEXT;
   v_now TIMESTAMPTZ := NOW();
-  v_clean_rut TEXT := LOWER(TRIM(p_rut));
+  v_clean_rut TEXT := LOWER(TRIM(REGEXP_REPLACE(p_rut, '[^0-9kK]', '', 'g')));
   v_clean_estamento TEXT := UPPER(TRIM(p_estamento));
 BEGIN
-  -- 1. Bloquear y verificar la fila del votante por (RUT, ESTAMENTO)
-  SELECT ha_votado, habilitado INTO v_already_voted, v_habilitado
-  FROM bd_padron
-  WHERE LOWER(TRIM(rut_votante)) = v_clean_rut
-    AND UPPER(TRIM(estamento)) = v_clean_estamento
-  FOR UPDATE;
+  -- 1. Verificar si ya existe un registro en el acta para esta dupla (RUT_LIMPIO, ESTAMENTO) [Bloqueo Multirrol / Multiescuela]
+  SELECT EXISTS (
+    SELECT 1 FROM acta_sufragio
+    WHERE LOWER(TRIM(REGEXP_REPLACE(rut_votante, '[^0-9kK]', '', 'g'))) = v_clean_rut
+      AND UPPER(TRIM(estamento)) = v_clean_estamento
+  ) INTO v_already_voted_acta;
 
-  -- Validaciones
-  IF NOT FOUND THEN
-    RAISE EXCEPTION 'VOTANTE_NO_ENCONTRADO: El votante con RUT % no fue encontrado en el padrón para el estamento %.', p_rut, p_estamento;
+  IF v_already_voted_acta IS TRUE THEN
+    RAISE EXCEPTION 'ALREADY_VOTED: El elector ya ha registrado su voto en esta elección para el estamento %.', p_estamento;
+  END IF;
+
+  -- 2. Verificar y bloquear las filas del padrón correspondientes a (RUT_LIMPIO, ESTAMENTO)
+  SELECT 
+    EXISTS (
+      SELECT 1 FROM bd_padron
+      WHERE LOWER(TRIM(REGEXP_REPLACE(rut_votante, '[^0-9kK]', '', 'g'))) = v_clean_rut
+        AND UPPER(TRIM(estamento)) = v_clean_estamento
+        AND ha_votado = TRUE
+    ),
+    COALESCE(BOOL_OR(habilitado), TRUE)
+  INTO v_already_voted_padron, v_habilitado
+  FROM bd_padron
+  WHERE LOWER(TRIM(REGEXP_REPLACE(rut_votante, '[^0-9kK]', '', 'g'))) = v_clean_rut
+    AND UPPER(TRIM(estamento)) = v_clean_estamento;
+
+  IF v_already_voted_padron IS TRUE THEN
+    RAISE EXCEPTION 'ALREADY_VOTED: El elector ya figura como habiendo votado en este estamento.';
   END IF;
 
   IF v_habilitado IS FALSE THEN
     RAISE EXCEPTION 'VOTANTE_INHABILITADO: El votante se encuentra inhabilitado para participar en este estamento.';
   END IF;
 
-  IF v_already_voted IS TRUE THEN
-    RAISE EXCEPTION 'ALREADY_VOTED: El votante ya ha emitido su voto en este estamento.';
-  END IF;
-
   -- Generar Folio y Código de Comprobante Único
   v_receipt_code := 'SLEP-' || UPPER(SUBSTRING(MD5(RANDOM()::TEXT) FROM 1 FOR 8));
   v_folio := 'FOLIO-' || TO_CHAR(v_now AT TIME ZONE 'America/Santiago', 'YYYYMMDD-HH24MISS') || '-' || UPPER(SUBSTRING(MD5(RANDOM()::TEXT) FROM 1 FOR 4));
 
-  -- 2. Marcar al votante como "ha votado" únicamente en este estamento
+  -- 3. Marcar ha_votado = TRUE en TODAS las filas de bd_padron para este RUT y estamento (Multiescuela)
   UPDATE bd_padron
   SET 
     ha_votado = TRUE,
     fecha_voto = v_now
-  WHERE LOWER(TRIM(rut_votante)) = v_clean_rut
+  WHERE LOWER(TRIM(REGEXP_REPLACE(rut_votante, '[^0-9kK]', '', 'g'))) = v_clean_rut
     AND UPPER(TRIM(estamento)) = v_clean_estamento;
 
-  -- 3. Depositar voto en la urna anónima
+  -- 4. Depositar voto en la urna anónima
   INSERT INTO votos_anonimos (
     candidate_id,
     estamento,
@@ -188,12 +202,12 @@ BEGIN
     v_now
   );
 
-  -- 4. Incrementar votos acumulados en la tabla candidatos si existe
+  -- 5. Incrementar votos acumulados en la tabla candidatos si existe
   UPDATE candidatos
   SET votos_acumulados = COALESCE(votos_acumulados, 0) + 1
   WHERE id = p_candidate_id;
 
-  -- 5. Registrar en el Acta de Sufragio Oficial con clave (rut_votante, estamento)
+  -- 6. Registrar en el Acta de Sufragio Oficial con clave compuesta (rut_votante, estamento)
   INSERT INTO acta_sufragio (
     folio,
     rut_votante,
@@ -205,7 +219,7 @@ BEGIN
     nombre_establecimiento
   ) VALUES (
     v_folio,
-    p_rut,
+    v_clean_rut,
     p_rut,
     COALESCE(p_email, 'sin-correo@slep.cl'),
     v_now,
