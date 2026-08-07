@@ -343,6 +343,9 @@ export function AdminView({
   const [confFechaInicio, setConfFechaInicio] = useState('');
   const [confFechaFin, setConfFechaFin] = useState('');
   const [confEstado, setConfEstado] = useState<EstadoEleccion>('ABIERTA');
+  const [confLogoUrl, setConfLogoUrl] = useState('');
+  const [confBgImageUrl, setConfBgImageUrl] = useState('');
+  const [confNombreInstitucion, setConfNombreInstitucion] = useState('');
 
   function toDatetimeLocalString(isoOrDateString?: string): string {
     if (!isoOrDateString) return '';
@@ -368,6 +371,38 @@ export function AdminView({
     }
   }
 
+  function handleLogoFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      alert('La imagen del logo no debe superar los 5MB.');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      if (typeof event.target?.result === 'string') {
+        setConfLogoUrl(event.target.result);
+      }
+    };
+    reader.readAsDataURL(file);
+  }
+
+  function handleBgFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 8 * 1024 * 1024) {
+      alert('La imagen de fondo no debe superar los 8MB.');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      if (typeof event.target?.result === 'string') {
+        setConfBgImageUrl(event.target.result);
+      }
+    };
+    reader.readAsDataURL(file);
+  }
+
   async function fetchElectionConfig() {
     setLoadingConfig(true);
     try {
@@ -381,6 +416,9 @@ export function AdminView({
         setConfFechaInicio(toDatetimeLocalString(data.config.fechaInicio));
         setConfFechaFin(toDatetimeLocalString(data.config.fechaFin));
         setConfEstado(data.config.estadoEleccion || 'ABIERTA');
+        setConfLogoUrl(data.config.logoUrl || '');
+        setConfBgImageUrl(data.config.bgImageUrl || '');
+        setConfNombreInstitucion(data.config.nombreInstitucion || 'Servicio Local de Educación Pública Valle Diguillín');
       }
     } catch (err) {
       console.error('Error al obtener configuración electoral:', err);
@@ -408,6 +446,9 @@ export function AdminView({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           tituloProceso: confTitulo.trim(),
+          nombreInstitucion: confNombreInstitucion.trim(),
+          logoUrl: confLogoUrl,
+          bgImageUrl: confBgImageUrl,
           estamentosHabilitados: confEstamentos,
           fechaInicio: new Date(confFechaInicio).toISOString(),
           fechaFin: new Date(confFechaFin).toISOString(),
@@ -419,7 +460,7 @@ export function AdminView({
       const data = (await res.json()) as { success: boolean; config?: ElectionConfig; windowStatus?: ElectionStatusCheck; message?: string };
 
       if (res.ok && data.success) {
-        setConfigMessage('✅ Configuración del proceso electoral y programación horaria guardada exitosamente.');
+        setConfigMessage('✅ Configuración electoral, marca e imagen institucional guardadas exitosamente.');
         if (data.config) setElectionConfig(data.config);
         if (data.windowStatus) setWindowStatus(data.windowStatus);
       } else {
@@ -1902,6 +1943,175 @@ az webapp config appsettings set --resource-group rg-slep-elecciones --name vota
                     <li>Los votantes solo podrán autenticarse y emitir votos si la fecha/hora actual de Chile está dentro del rango configurado.</li>
                     <li>Solo los candidatos vinculados a los estamentos marcados como habilitados figurarán en las cédulas de votación.</li>
                   </ul>
+                </div>
+              </div>
+            </div>
+
+            {/* Card 3: Personalización de Apariencia e Imagen Institucional */}
+            <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-6">
+              <div className="border-b pb-3 border-slate-100 flex flex-wrap items-center justify-between gap-2">
+                <h3 className="font-serif font-bold text-sm text-slate-900 flex items-center gap-2">
+                  <span>🎨</span> Ajustes de Apariencia e Imagen Institucional (Logo y Fondo)
+                </h3>
+                <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-blue-50 text-[#0b5294] border border-blue-200">
+                  Personalización en Tiempo Real
+                </span>
+              </div>
+
+              <p className="text-xs text-slate-600 font-medium">
+                Personaliza la marca visual del portal de votación. Puedes subir un logo institucional, seleccionar una imagen de fondo o ingresar URLs personalizadas.
+              </p>
+
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                {/* Subsección A: Nombre de la Institución */}
+                <div className="space-y-3 p-4 bg-slate-50 rounded-xl border border-slate-200">
+                  <label className="block text-xs font-bold text-slate-800 uppercase flex items-center gap-1.5">
+                    <span>🏛️</span> Nombre de la Institución / Servicio
+                  </label>
+                  <input
+                    type="text"
+                    className="w-full h-10 px-3 text-xs rounded-xl border border-slate-300 bg-white font-bold text-slate-800 focus:outline-none focus:border-[#0b5294]"
+                    value={confNombreInstitucion}
+                    onChange={(e) => setConfNombreInstitucion(e.target.value)}
+                    placeholder="Ej. Servicio Local de Educación Pública Valle Diguillín"
+                  />
+                  <span className="text-[11px] text-slate-500 block leading-tight">
+                    Texto exhibido en la cabecera del portal sobre el título del proceso electoral.
+                  </span>
+                </div>
+
+                {/* Subsección B: Logo Institucional */}
+                <div className="space-y-3 p-4 bg-slate-50 rounded-xl border border-slate-200">
+                  <div className="flex items-center justify-between">
+                    <label className="block text-xs font-bold text-slate-800 uppercase flex items-center gap-1.5">
+                      <span>🖼️</span> Logo Institucional
+                    </label>
+                    {confLogoUrl && (
+                      <button
+                        type="button"
+                        onClick={() => setConfLogoUrl('')}
+                        className="text-[10px] text-red-600 font-bold hover:underline"
+                      >
+                        Restablecer por defecto
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="space-y-2">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleLogoFileUpload}
+                      className="block w-full text-[11px] text-slate-600 file:mr-2 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-[#0b5294] file:text-white hover:file:bg-[#0a4278] cursor-pointer"
+                    />
+                    <div className="text-[10px] text-slate-400 font-semibold text-center uppercase tracking-wider my-1">O bien URL de imagen:</div>
+                    <input
+                      type="url"
+                      className="w-full h-9 px-3 text-[11px] rounded-lg border border-slate-300 bg-white font-mono text-slate-800 focus:outline-none focus:border-[#0b5294]"
+                      value={confLogoUrl}
+                      onChange={(e) => setConfLogoUrl(e.target.value)}
+                      placeholder="https://ejemplo.cl/logo.png"
+                    />
+                  </div>
+
+                  {/* Previsualización del Logo */}
+                  <div className="mt-2 p-3 bg-[#061d3d] rounded-lg flex items-center justify-center min-h-[60px] border border-white/10">
+                    {confLogoUrl ? (
+                      <img
+                        src={confLogoUrl}
+                        alt="Previsualización Logo Institucional"
+                        className="max-h-12 max-w-full object-contain rounded"
+                        onError={() => alert('No se pudo cargar la imagen del logo desde la URL especificada.')}
+                      />
+                    ) : (
+                      <div className="flex items-center gap-2 text-white/80 text-xs font-bold">
+                        <svg width="24" height="28" viewBox="0 0 44 50" fill="none">
+                          <path d="M22 2L4 10v14c0 12 8.5 22 18 26 9.5-4 18-14 18-26V10L22 2z" fill="rgba(255,255,255,0.2)" stroke="rgba(255,255,255,0.6)" strokeWidth="1.5" />
+                          <path d="M16 24l4 4 8-8" stroke="rgba(255,255,255,0.9)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                        <span className="text-[11px] text-slate-300">Escudo Oficial (Predeterminado)</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Subsección C: Imagen de Fondo */}
+                <div className="space-y-3 p-4 bg-slate-50 rounded-xl border border-slate-200">
+                  <div className="flex items-center justify-between">
+                    <label className="block text-xs font-bold text-slate-800 uppercase flex items-center gap-1.5">
+                      <span>🌌</span> Imagen de Fondo
+                    </label>
+                    {confBgImageUrl && (
+                      <button
+                        type="button"
+                        onClick={() => setConfBgImageUrl('')}
+                        className="text-[10px] text-red-600 font-bold hover:underline"
+                      >
+                        Restablecer por defecto
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="space-y-2">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleBgFileUpload}
+                      className="block w-full text-[11px] text-slate-600 file:mr-2 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-[#0b5294] file:text-white hover:file:bg-[#0a4278] cursor-pointer"
+                    />
+
+                    {/* Selector de Presets de Fondo */}
+                    <div className="grid grid-cols-2 gap-1.5 pt-1">
+                      <button
+                        type="button"
+                        onClick={() => setConfBgImageUrl('/fondo.webp')}
+                        className={`px-2 py-1 rounded text-[10px] font-bold border transition ${
+                          confBgImageUrl === '/fondo.webp' || !confBgImageUrl
+                            ? 'bg-[#0b5294] text-white border-[#0b5294]'
+                            : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+                        }`}
+                      >
+                        Fondo Oficial (WebP)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setConfBgImageUrl('linear-gradient(135deg, #0b2545 0%, #134074 50%, #8da9c4 100%)')}
+                        className={`px-2 py-1 rounded text-[10px] font-bold border transition ${
+                          confBgImageUrl.includes('linear-gradient')
+                            ? 'bg-[#0b5294] text-white border-[#0b5294]'
+                            : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+                        }`}
+                      >
+                        Degradado Azul
+                      </button>
+                    </div>
+
+                    <div className="text-[10px] text-slate-400 font-semibold text-center uppercase tracking-wider my-1">O bien URL de imagen:</div>
+                    <input
+                      type="url"
+                      className="w-full h-9 px-3 text-[11px] rounded-lg border border-slate-300 bg-white font-mono text-slate-800 focus:outline-none focus:border-[#0b5294]"
+                      value={confBgImageUrl}
+                      onChange={(e) => setConfBgImageUrl(e.target.value)}
+                      placeholder="https://ejemplo.cl/fondo-institucional.jpg"
+                    />
+                  </div>
+
+                  {/* Previsualización de la Imagen de Fondo */}
+                  <div
+                    className="mt-2 h-16 rounded-lg border border-slate-300 relative overflow-hidden bg-cover bg-center flex items-center justify-center shadow-inner"
+                    style={{
+                      background: confBgImageUrl
+                        ? confBgImageUrl.startsWith('linear-gradient')
+                          ? confBgImageUrl
+                          : `url(${confBgImageUrl}) center/cover no-repeat`
+                        : 'url(/fondo.webp) center/cover no-repeat',
+                    }}
+                  >
+                    <div className="absolute inset-0 bg-black/40 backdrop-blur-[1px]" />
+                    <span className="relative z-10 text-[10px] font-bold text-white px-2 py-0.5 rounded bg-black/60 border border-white/20">
+                      Vista previa de fondo
+                    </span>
+                  </div>
                 </div>
               </div>
             </div>

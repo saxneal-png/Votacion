@@ -214,12 +214,19 @@ CREATE POLICY "Administración total de catálogo maestro" ON bd_establecimiento
 CREATE TABLE IF NOT EXISTS bd_configuracion_eleccion (
     id VARCHAR(50) PRIMARY KEY DEFAULT 'config_principal',
     titulo_proceso TEXT NOT NULL DEFAULT 'Elección de Representantes del Consejo Local SLEP',
+    nombre_institucion TEXT DEFAULT 'Servicio Local de Educación Pública Valle Diguillín',
+    logo_url TEXT DEFAULT '',
+    bg_image_url TEXT DEFAULT '',
     estamentos_habilitados JSONB NOT NULL DEFAULT '["ESTUDIANTES","PADRES_APODERADOS","DOCENTES","ASISTENTES","DIRECTIVOS"]'::jsonb,
     fecha_inicio TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     fecha_fin TIMESTAMPTZ NOT NULL DEFAULT (NOW() + INTERVAL '30 days'),
     estado_eleccion TEXT NOT NULL DEFAULT 'ABIERTA',
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+ALTER TABLE bd_configuracion_eleccion ADD COLUMN IF NOT EXISTS nombre_institucion TEXT DEFAULT 'Servicio Local de Educación Pública Valle Diguillín';
+ALTER TABLE bd_configuracion_eleccion ADD COLUMN IF NOT EXISTS logo_url TEXT DEFAULT '';
+ALTER TABLE bd_configuracion_eleccion ADD COLUMN IF NOT EXISTS bg_image_url TEXT DEFAULT '';
 
 ALTER TABLE bd_configuracion_eleccion ENABLE ROW LEVEL SECURITY;
 

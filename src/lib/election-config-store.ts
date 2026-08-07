@@ -20,6 +20,9 @@ export type EstadoEleccion = 'PROGRAMADA' | 'ABIERTA' | 'PAUSADA' | 'FINALIZADA'
 export interface ElectionConfig {
   id?: string;
   tituloProceso: string;
+  nombreInstitucion?: string;
+  logoUrl?: string;
+  bgImageUrl?: string;
   estamentosHabilitados: EstamentoCodigo[];
   fechaInicio: string; // ISO string
   fechaFin: string;    // ISO string
@@ -39,6 +42,9 @@ export interface ElectionStatusCheck {
 const DEFAULT_CONFIG: ElectionConfig = {
   id: 'config_principal',
   tituloProceso: 'Elección de Representantes del Consejo Local SLEP',
+  nombreInstitucion: 'Servicio Local de Educación Pública Valle Diguillín',
+  logoUrl: '',
+  bgImageUrl: '',
   estamentosHabilitados: [
     'ESTUDIANTES',
     'PADRES_APODERADOS',
@@ -93,6 +99,18 @@ export async function getElectionConfigAsync(): Promise<ElectionConfig> {
     const fetched: ElectionConfig = {
       id: 'config_principal',
       tituloProceso: String(data.titulo_proceso ?? DEFAULT_CONFIG.tituloProceso),
+      nombreInstitucion:
+        data.nombre_institucion !== undefined && data.nombre_institucion !== null
+          ? String(data.nombre_institucion)
+          : (electionConfigStore.nombreInstitucion ?? DEFAULT_CONFIG.nombreInstitucion ?? ''),
+      logoUrl:
+        data.logo_url !== undefined && data.logo_url !== null
+          ? String(data.logo_url)
+          : (electionConfigStore.logoUrl ?? DEFAULT_CONFIG.logoUrl ?? ''),
+      bgImageUrl:
+        data.bg_image_url !== undefined && data.bg_image_url !== null
+          ? String(data.bg_image_url)
+          : (electionConfigStore.bgImageUrl ?? DEFAULT_CONFIG.bgImageUrl ?? ''),
       estamentosHabilitados: parsedEstamentos,
       fechaInicio: String(data.fecha_inicio ?? DEFAULT_CONFIG.fechaInicio),
       fechaFin: String(data.fecha_fin ?? DEFAULT_CONFIG.fechaFin),
@@ -124,20 +142,44 @@ export async function saveElectionConfigAsync(config: Partial<ElectionConfig>): 
 
   if (supabaseAdmin) {
     try {
+      const payload: Record<string, any> = {
+        id: 'config_principal',
+        titulo_proceso: updated.tituloProceso,
+        estamentos_habilitados: updated.estamentosHabilitados,
+        fecha_inicio: updated.fechaInicio,
+        fecha_fin: updated.fechaFin,
+        estado_eleccion: updated.estadoEleccion,
+        updated_at: updated.updatedAt,
+      };
+
+      if (updated.nombreInstitucion !== undefined) payload.nombre_institucion = updated.nombreInstitucion;
+      if (updated.logoUrl !== undefined) payload.logo_url = updated.logoUrl;
+      if (updated.bgImageUrl !== undefined) payload.bg_image_url = updated.bgImageUrl;
+
       const { error } = await supabaseAdmin
         .from('bd_configuracion_eleccion')
-        .upsert({
-          id: 'config_principal',
-          titulo_proceso: updated.tituloProceso,
-          estamentos_habilitados: updated.estamentosHabilitados,
-          fecha_inicio: updated.fechaInicio,
-          fecha_fin: updated.fechaFin,
-          estado_eleccion: updated.estadoEleccion,
-          updated_at: updated.updatedAt,
-        }, { onConflict: 'id' });
+        .upsert(payload, { onConflict: 'id' });
 
       if (error) {
         console.error('[SUPABASE] Error al guardar bd_configuracion_eleccion:', error.message);
+        if (
+          error.message.includes('nombre_institucion') ||
+          error.message.includes('logo_url') ||
+          error.message.includes('bg_image_url') ||
+          error.message.includes('column') ||
+          error.message.includes('schema cache') ||
+          error.message.includes('Could not find')
+        ) {
+          delete payload.nombre_institucion;
+          delete payload.logo_url;
+          delete payload.bg_image_url;
+          const { error: fallbackErr } = await supabaseAdmin
+            .from('bd_configuracion_eleccion')
+            .upsert(payload, { onConflict: 'id' });
+          if (!fallbackErr) {
+            console.log('[SUPABASE] Configuración electoral guardada en modo de compatibilidad legada.');
+          }
+        }
       } else {
         console.log('[SUPABASE] Configuración electoral guardada en Supabase.');
       }

@@ -12,6 +12,9 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(
       {
         tituloProceso: config.tituloProceso,
+        nombreInstitucion: config.nombreInstitucion,
+        logoUrl: config.logoUrl,
+        bgImageUrl: config.bgImageUrl,
         estamentosHabilitados: config.estamentosHabilitados,
         estadoEleccion: config.estadoEleccion,
         windowStatus,

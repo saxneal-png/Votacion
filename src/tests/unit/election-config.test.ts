@@ -9,6 +9,9 @@ describe('election-config-store', () => {
   it('guarda y obtiene la configuración electoral y estamentos seleccionados', async () => {
     const saved = await saveElectionConfigAsync({
       tituloProceso: 'Elección Especial Docentes 2026',
+      nombreInstitucion: 'SLEP Ñuble Cordillera',
+      logoUrl: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+      bgImageUrl: '/custom-bg.jpg',
       estamentosHabilitados: ['DOCENTES', 'DIRECTIVOS'],
       fechaInicio: '2026-08-01T00:00:00.000Z',
       fechaFin: '2026-12-31T23:59:59.000Z',
@@ -16,10 +19,16 @@ describe('election-config-store', () => {
     });
 
     expect(saved.tituloProceso).toBe('Elección Especial Docentes 2026');
+    expect(saved.nombreInstitucion).toBe('SLEP Ñuble Cordillera');
+    expect(saved.logoUrl).toContain('data:image/png;base64');
+    expect(saved.bgImageUrl).toBe('/custom-bg.jpg');
     expect(saved.estamentosHabilitados).toEqual(['DOCENTES', 'DIRECTIVOS']);
 
     const fetched = await getElectionConfigAsync();
     expect(fetched.tituloProceso).toBe('Elección Especial Docentes 2026');
+    expect(fetched.nombreInstitucion).toBe('SLEP Ñuble Cordillera');
+    expect(fetched.logoUrl).toContain('data:image/png;base64');
+    expect(fetched.bgImageUrl).toBe('/custom-bg.jpg');
     expect(fetched.estamentosHabilitados).toContain('DOCENTES');
     expect(fetched.estamentosHabilitados).not.toContain('ESTUDIANTES');
   });

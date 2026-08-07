@@ -205,6 +205,12 @@ export default function HomePage() {
   const [pendingOperation, setPendingOperation] = useState<PendingOperation>(null);
   const [latencyState, setLatencyState] = useState<LatencyState>('idle');
   const [hasPendingBallots, setHasPendingBallots] = useState(false);
+  const [brandingConfig, setBrandingConfig] = useState<{
+    tituloProceso?: string;
+    nombreInstitucion?: string;
+    logoUrl?: string;
+    bgImageUrl?: string;
+  }>({});
 
   const appStateRef = useRef(appState);
   const idleResetRef = useRef<() => void>(() => undefined);
@@ -219,6 +225,26 @@ export default function HomePage() {
   useEffect(() => {
     appStateRef.current = appState;
   }, [appState]);
+
+  useEffect(() => {
+    async function fetchBrandingConfig() {
+      try {
+        const res = await fetch('/api/election-config');
+        if (res.ok) {
+          const data = await res.json();
+          setBrandingConfig({
+            tituloProceso: data.tituloProceso,
+            nombreInstitucion: data.nombreInstitucion,
+            logoUrl: data.logoUrl,
+            bgImageUrl: data.bgImageUrl,
+          });
+        }
+      } catch (err) {
+        console.error('Error al obtener marca e imagen institucional:', err);
+      }
+    }
+    void fetchBrandingConfig();
+  }, []);
 
   useEffect(() => {
     async function checkExistingSession() {
@@ -740,7 +766,18 @@ export default function HomePage() {
 
   return (
     <main className={`portal-shell relative min-h-screen overflow-hidden isolate font-serif ${isHighContrast ? 'portal-contrast-high' : ''} ${isSimplifiedMode ? 'portal-simplified-mode' : ''} ${isReducedMotion ? 'portal-reduced-motion' : ''} ${fontScale === 'small' ? 'portal-font-small' : ''} ${fontScale === 'large' ? 'portal-font-large' : ''}`}>
-      <div className="absolute inset-0 bg-portal" />
+      <div
+        className={`absolute inset-0 ${brandingConfig.bgImageUrl ? '' : 'bg-portal'}`}
+        style={
+          brandingConfig.bgImageUrl
+            ? {
+                background: brandingConfig.bgImageUrl.startsWith('linear-gradient')
+                  ? brandingConfig.bgImageUrl
+                  : `url(${brandingConfig.bgImageUrl}) center center / cover no-repeat`,
+              }
+            : undefined
+        }
+      />
       <div className="absolute inset-0 bg-gradient-to-br from-[#062048]/85 via-[#082a54]/70 to-[#061836]/82" />
 
       <AccessibilityPanel
@@ -767,17 +804,25 @@ export default function HomePage() {
               <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_80%_0%,rgba(255,255,255,0.08),transparent_55%)] pointer-events-none" />
               <div className="relative flex items-start gap-4">
                 <div className="flex items-center gap-4 min-w-0">
-                  <svg className="shrink-0" width="40" height="46" viewBox="0 0 44 50" fill="none" aria-hidden="true">
-                    <path d="M22 2L4 10v14c0 12 8.5 22 18 26 9.5-4 18-14 18-26V10L22 2z" fill="rgba(255,255,255,0.15)" stroke="rgba(255,255,255,0.5)" strokeWidth="1.5" strokeLinejoin="round" />
-                    <path d="M22 9L11 14v9c0 7.5 5 13.5 11 16 6-2.5 11-8.5 11-16v-9L22 9z" fill="rgba(255,255,255,0.18)" stroke="rgba(255,255,255,0.35)" strokeWidth="1" strokeLinejoin="round" />
-                    <path d="M16 24l4 4 8-8" stroke="rgba(255,255,255,0.9)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
+                  {brandingConfig.logoUrl ? (
+                    <img
+                      src={brandingConfig.logoUrl}
+                      alt="Logo institucional"
+                      className="shrink-0 max-h-12 w-auto max-w-[140px] object-contain rounded drop-shadow-sm"
+                    />
+                  ) : (
+                    <svg className="shrink-0" width="40" height="46" viewBox="0 0 44 50" fill="none" aria-hidden="true">
+                      <path d="M22 2L4 10v14c0 12 8.5 22 18 26 9.5-4 18-14 18-26V10L22 2z" fill="rgba(255,255,255,0.15)" stroke="rgba(255,255,255,0.5)" strokeWidth="1.5" strokeLinejoin="round" />
+                      <path d="M22 9L11 14v9c0 7.5 5 13.5 11 16 6-2.5 11-8.5 11-16v-9L22 9z" fill="rgba(255,255,255,0.18)" stroke="rgba(255,255,255,0.35)" strokeWidth="1" strokeLinejoin="round" />
+                      <path d="M16 24l4 4 8-8" stroke="rgba(255,255,255,0.9)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  )}
                   <div className="min-w-0">
                     <p className="m-0 mb-1 text-[10px] font-bold font-sans uppercase tracking-[0.16em] text-white/80">
-                      Servicio Local de Educacion Publica Valle Diguillin
+                      {brandingConfig.nombreInstitucion || 'Servicio Local de Educacion Publica Valle Diguillin'}
                     </p>
                     <h2 className="m-0 font-serif text-[clamp(17px,2.4vw,24px)] text-white leading-tight tracking-tight">
-                      Portal de votacion del Consejo Local
+                      {brandingConfig.tituloProceso || 'Portal de votacion del Consejo Local'}
                     </h2>
                   </div>
                 </div>
