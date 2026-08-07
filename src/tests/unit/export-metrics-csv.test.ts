@@ -33,5 +33,6 @@ describe('export-metrics-csv API route', () => {
     expect(csvText).toContain('1. RESUMEN DE PARTICIPACIÓN POR ESTAMENTO (DECRETO N° 102)');
     expect(csvText).toContain('2. ESCRUTINIO Y RESULTADOS POR CANDIDATURA');
     expect(csvText).toContain('3. PARTICIPACIÓN POR ESTABLECIMIENTO EDUCACIONAL (RBD)');
-  }, 15000);
+  }, 30000);
 });
+

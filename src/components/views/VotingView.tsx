@@ -225,7 +225,7 @@ export function VotingView({
                 ) : null}
               </div>
               <span className="text-[17px] font-bold text-ink font-serif leading-tight">
-                {candidate.name}
+                {candidate.nombreCompleto || candidate.name}
               </span>
               <span className="text-[11px] font-sans font-medium text-ink-muted leading-tight">
                 {candidate.role}
@@ -294,8 +294,9 @@ export function VotingView({
                 </span>
                 <div className="min-w-0">
                   <p className="m-0 font-serif font-bold text-[16px] text-ink leading-tight">
-                    {selectedCandidate.numero ? `N° ${selectedCandidate.numero} - ` : ''}{selectedCandidate.name}
+                    {selectedCandidate.numero ? `N° ${selectedCandidate.numero} - ` : ''}{selectedCandidate.nombreCompleto || selectedCandidate.name}
                   </p>
+
                   <p className="m-0 mt-0.5 font-sans text-[11px] text-ink-muted leading-tight">{selectedCandidate.role}</p>
                 </div>
               </div>

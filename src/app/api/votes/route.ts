@@ -147,7 +147,14 @@ export async function POST(request: Request) {
       receiptCode: voteResult.receiptCode || voteResult.comprobanteId,
       folio: voteResult.folio || voteResult.comprobanteId,
       voterName: userFullName,
+      candidate: {
+        ...candidate,
+        name: candidateName,
+        nombreCompleto: candidateName,
+      },
+
     });
+
     response.cookies.set({
       name: SESSION_COOKIE_NAME,
       value: '',

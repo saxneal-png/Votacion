@@ -617,7 +617,9 @@ export default function HomePage() {
       const result = await runMeasuredRequest('vote', () => submitVote(selectedCandidateId));
       setReceiptCode(result.receiptCode);
       setReceiptIssuedAt(new Date().toISOString());
-      setConfirmedCandidateName(result.candidate.name);
+      const candName = result?.candidate?.nombreCompleto || result?.candidate?.name || 'la candidatura seleccionada';
+      setConfirmedCandidateName(candName);
+
       setTransitionDirection('forward');
       transitionTo('success');
     } catch (error) {
