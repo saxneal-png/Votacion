@@ -5,7 +5,7 @@ import { ADMIN_SESSION_COOKIE, validateAdminSession } from '@/lib/admin-session'
 import { getCandidatosAsync } from '@/lib/candidates-store';
 import { getPadronRecordsAsync } from '@/lib/padron-store';
 import { getVotingRecordsAsync } from '@/lib/voting-record-store';
-import { getVoteTallies } from '@/lib/metrics-store';
+import { getVoteTalliesAsync } from '@/lib/metrics-store';
 
 export async function POST(request: NextRequest) {
   const cookieStore = await cookies();
@@ -25,17 +25,14 @@ export async function POST(request: NextRequest) {
     const triggerAppsScript = body.triggerAppsScript ?? false;
     const slepId = body.slepId || 'slep-principal';
 
-    // 1. Recopilar resultados finales
+    // 1. Recopilar resultados finales desde Supabase y stores
     const candidates = await getCandidatosAsync({ estamento: 'ALL' });
     const { records: padron } = await getPadronRecordsAsync({ slepId });
     const { records: votes } = await getVotingRecordsAsync();
-    const tallies = getVoteTallies(slepId);
+    const tallies = await getVoteTalliesAsync(slepId);
 
     const uniquePadronRuts = new Set(padron.map((p) => p.rutVotante.replace(/[^0-9kK]/g, '').toUpperCase()));
-    const totalPadron = uniquePadronRuts.size;
-    const totalVotesCast = votes.length;
-    const porcentajeParticipacion = totalPadron > 0 ? ((totalVotesCast / totalPadron) * 100).toFixed(1) : '0';
-
+    const totalPadron = uniquePadronRuts.size || padron.length;
 
     const resultadosCandidatos = candidates.map((c) => ({
       id: c.id,
@@ -44,6 +41,12 @@ export async function POST(request: NextRequest) {
       colegio: c.escuelaEstablecimiento || c.role,
       votos: tallies.get(c.id) ?? 0,
     }));
+
+    const totalCandidateVotes = resultadosCandidatos.reduce((acc, r) => acc + r.votos, 0);
+    const totalPadronVoted = new Set(padron.filter((p) => p.haVotado).map((p) => p.rutVotante)).size;
+    const totalVotesCast = Math.max(votes.length, totalCandidateVotes, totalPadronVoted);
+    const porcentajeParticipacion = totalPadron > 0 ? ((totalVotesCast / totalPadron) * 100).toFixed(1) : '0';
+
 
     const fechaCierre = new Date().toLocaleString('es-CL', {
       timeZone: 'America/Santiago',

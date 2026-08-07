@@ -1,14 +1,17 @@
 import type { Candidate, Estamento } from '@/types';
 import { supabaseAdmin } from '@/lib/supabase-client';
-import { unstable_cache, revalidateTag } from 'next/cache';
 
-function revalidateCandidatesCache() {
-  try {
-    revalidateTag('candidates');
-  } catch (err) {
-    // Se ignora silenciosamente si se invoca fuera del contexto de petición de Next.js (ej. Vitest)
+async function revalidateCandidatesCache() {
+  if (typeof window === 'undefined') {
+    try {
+      const { revalidateTag } = await import('next/cache');
+      revalidateTag('candidates');
+    } catch (err) {
+      // Se ignora silenciosamente fuera del contexto HTTP de Next.js (ej. Vitest)
+    }
   }
 }
+
 
 export interface CandidateFormData {
   nombreCompleto: string;
@@ -249,21 +252,17 @@ function mapRowToCandidate(item: Record<string, unknown>): Candidate {
 /**
  * Consulta cacheada con Next.js unstable_cache (ISR de baja latencia)
  */
-const getCachedCandidatesFromSupabase = unstable_cache(
-  async () => {
-    const { data, error } = await supabaseAdmin
-      .from('candidatos')
-      .select('*')
-      .order('created_at', { ascending: true });
+async function fetchCandidatesFromSupabase() {
+  const { data, error } = await supabaseAdmin
+    .from('candidatos')
+    .select('*')
+    .order('created_at', { ascending: true });
 
-    if (error || !data) {
-      return null;
-    }
-    return data;
-  },
-  ['candidates-store-list-v1'],
-  { revalidate: 300, tags: ['candidates'] },
-);
+  if (error || !data) {
+    return null;
+  }
+  return data;
+}
 
 /**
  * Obtener candidatos desde Supabase con caché ISR de Next.js y fallback en memoria
@@ -276,14 +275,30 @@ export async function getCandidatosAsync({
   search?: string;
 } = {}): Promise<Candidate[]> {
   try {
-    const cachedData = await getCachedCandidatesFromSupabase();
+    let rawData: Record<string, unknown>[] | null = null;
 
-    if (!cachedData || cachedData.length === 0) {
+    if (typeof window === 'undefined') {
+      try {
+        const { unstable_cache } = await import('next/cache');
+        const cachedFn = unstable_cache(
+          fetchCandidatesFromSupabase,
+          ['candidates-store-list-v1'],
+          { revalidate: 300, tags: ['candidates'] },
+        );
+        rawData = await cachedFn();
+      } catch {
+        rawData = await fetchCandidatesFromSupabase();
+      }
+    } else {
+      rawData = await fetchCandidatesFromSupabase();
+    }
+
+    if (!rawData || rawData.length === 0) {
       // Sin datos en Supabase → estado limpio (sin mocks)
       return [];
     }
 
-    let results = cachedData.map((item) => mapRowToCandidate(item as Record<string, unknown>));
+    let results = rawData.map((item) => mapRowToCandidate(item as Record<string, unknown>));
 
     if (estamento && estamento !== 'ALL') {
       const variants = getEstamentoVariants(estamento).map((v) => v.toLowerCase());
@@ -306,6 +321,7 @@ export async function getCandidatosAsync({
     return getCandidatos({ estamento, search });
   }
 }
+
 
 /**
  * Crear candidato en Supabase y en memoria

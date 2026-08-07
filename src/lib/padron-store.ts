@@ -3,6 +3,10 @@ import { cleanAndValidateRUT, formatRut } from '@/lib/rut-validator';
 import { supabaseAdmin } from '@/lib/supabase-client';
 import { getSchoolsMasterAsync, getSchoolsMasterMapAsync, SchoolMasterRecord } from '@/lib/schools-master-store';
 import { parsePadronWorkbook, type ParsedPadronItem } from '@/lib/padron-parser';
+import { getVoteTalliesAsync } from '@/lib/metrics-store';
+
+
+
 
 export type EstamentoDecreto102 =
   | 'ESTUDIANTES'
@@ -123,7 +127,11 @@ export function normalizeEstamentoDecreto102(rawEstamento: string): EstamentoDec
 /**
  * Calcula el Quórum inicial del 30% por estamento
  */
-export function calculateEstamentoQuorums(records: PadronRecord[] = padronStore): QuorumEstamentoStatus[] {
+export function calculateEstamentoQuorums(
+  records: PadronRecord[] = padronStore,
+  _talliesMap?: Map<string, number>,
+  candidateVotesByEstamento?: Record<string, number>,
+): QuorumEstamentoStatus[] {
   const estamentoMeta: Array<{ estamento: EstamentoDecreto102; label: string }> = [
     { estamento: 'ESTUDIANTES', label: 'Estudiantes' },
     { estamento: 'PADRES_APODERADOS', label: 'Padres y Apoderados' },
@@ -141,13 +149,15 @@ export function calculateEstamentoQuorums(records: PadronRecord[] = padronStore)
     const padronTotal = uniqueRutVotantes.size;
     const quorum30Requerido = Math.ceil(padronTotal * 0.3);
 
-    // Contar votos emitidos ÚNICOS por RUT en este estamento
+    // Contar votos emitidos ÚNICOS por RUT en este estamento desde padrón
     const uniqueVotosEmitidos = new Set(
       recordsByEstamento
         .filter((r) => r.haVotado)
         .map((r) => r.rutVotante.replace(/[^0-9kK]/g, '').toUpperCase()),
     );
-    const votosEmitidos = uniqueVotosEmitidos.size;
+
+    const extraVotes = candidateVotesByEstamento?.[estamento] ?? 0;
+    const votosEmitidos = Math.max(uniqueVotosEmitidos.size, extraVotes);
     const porcentajeParticipacion = padronTotal > 0 ? Number(((votosEmitidos / padronTotal) * 100).toFixed(1)) : 0;
 
     return {
@@ -161,6 +171,8 @@ export function calculateEstamentoQuorums(records: PadronRecord[] = padronStore)
     };
   });
 }
+
+
 
 
 /**
@@ -803,17 +815,44 @@ export async function getPadronRecordsAsync({
     const totalPages = Math.ceil(total / pageSize) || 1;
     const allSchools = await getAllSchoolsAsync();
 
-    // Obtener los registros necesarios para el cálculo exacto de quórums a nivel de padrón
+    // Obtener los registros necesarios para el cálculo exacto de quórums a nivel de padrón y escrutinio
     const { records: quorumRecords } = await getAllPadronRecordsAsync({ search, estamento, rbd, slepId });
+    const talliesMap = await getVoteTalliesAsync(slepId);
+    const { getCandidatosAsync } = await import('@/lib/candidates-store');
+    const allCandidates = await getCandidatosAsync({ estamento: 'ALL' });
+
+    const candidateVotesByEstamento: Record<string, number> = {
+      ESTUDIANTES: 0,
+      PADRES_APODERADOS: 0,
+      DOCENTES: 0,
+      ASISTENTES: 0,
+      DIRECTIVOS: 0,
+    };
+
+    allCandidates.forEach((c) => {
+      const votesCount = talliesMap.get(c.id) ?? 0;
+      const estNorm = String(c.estamento || '').toUpperCase();
+      if (estNorm.includes('ESTUDIANTE')) candidateVotesByEstamento.ESTUDIANTES += votesCount;
+      else if (estNorm.includes('APODERADO') || estNorm.includes('PADRE')) candidateVotesByEstamento.PADRES_APODERADOS += votesCount;
+      else if (estNorm.includes('DOCENTE')) candidateVotesByEstamento.DOCENTES += votesCount;
+      else if (estNorm.includes('ASISTENTE')) candidateVotesByEstamento.ASISTENTES += votesCount;
+      else if (estNorm.includes('DIRECTIVO')) candidateVotesByEstamento.DIRECTIVOS += votesCount;
+    });
 
     return {
       records,
       total,
       totalPages,
       currentPage: page,
-      quorums: calculateEstamentoQuorums(quorumRecords.length > 0 ? quorumRecords : records),
+      quorums: calculateEstamentoQuorums(
+        quorumRecords.length > 0 ? quorumRecords : records,
+        talliesMap,
+        candidateVotesByEstamento,
+      ),
       schools: allSchools,
     };
+
+
   } catch (err) {
     console.error('[SUPABASE] Excepción al consultar bd_padron:', err);
     const localData = getPadronRecords({ search, estamento, rbd });
