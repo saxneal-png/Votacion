@@ -161,14 +161,21 @@ export async function recordVoteInSupabase({
   }
 
   // 3. Marcar el padrón bd_padron como ha_votado = true
+  const estVariants = [
+    estamento.toUpperCase(),
+    estamento.toLowerCase(),
+    estamento.charAt(0).toUpperCase() + estamento.slice(1).toLowerCase(),
+    estamento.slice(0, -1), // singular (ej. Docente)
+  ];
+
   const { error: padronError } = await supabaseAdmin
     .from('bd_padron')
     .update({
       ha_votado: true,
       fecha_voto: new Date().toISOString(),
     })
-    .or(`rut_votante.eq.${cleanRutStr},rut_votante.eq.${formattedRutStr}`)
-    .eq('estamento', estamento);
+    .or(`rut_votante.ilike.%${cleanRutStr}%,formatted_rut_votante.ilike.%${cleanRutStr}%`)
+    .in('estamento', estVariants);
 
   if (padronError) {
     console.error('[SUPABASE] Error al actualizar estado ha_votado en bd_padron:', padronError.message);

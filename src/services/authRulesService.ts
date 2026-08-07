@@ -292,8 +292,32 @@ export async function getAllVoterEstamentosAsync(rutVotante: string): Promise<Vo
   const records = await findAllVoterRecordsAsync(rutVotante);
   const map = new Map<string, VoterEstamentoOption>();
 
+  let votedEstamentosFromActa: string[] = [];
+  if (supabaseAdmin && rutVotante) {
+    const cleanDigits = rutVotante.replace(/[^0-9kK]/g, '').toUpperCase();
+    try {
+      const { data: actaData } = await supabaseAdmin
+        .from('acta_sufragio')
+        .select('estamento')
+        .or(`rut_votante.ilike.%${cleanDigits}%,formatted_rut_votante.ilike.%${cleanDigits}%`);
+
+      if (actaData && actaData.length > 0) {
+        votedEstamentosFromActa = actaData.map((d: { estamento?: string }) => {
+          const raw = String(d.estamento || '');
+          return normalizeEstamentoDecreto102(raw) || raw.toUpperCase();
+        });
+      }
+    } catch {
+      // Ignorar excepción si la tabla o consulta falla
+    }
+  }
+
   records.forEach((r) => {
-    const est = r.estamento;
+    const est = normalizeEstamentoDecreto102(r.estamento) || (r.estamento.toUpperCase() as EstamentoDecreto102);
+    const hasVotedInMemory = hasUserVoted(rutVotante, est) || hasUserVoted(rutVotante, r.estamento);
+    const hasVotedInActa = votedEstamentosFromActa.includes(est);
+    const isVoted = r.haVotado || hasVotedInMemory || hasVotedInActa;
+
     if (!map.has(est)) {
       let label = 'Docentes';
       if (est === 'PADRES_APODERADOS') label = 'Padres y Apoderados';
@@ -307,12 +331,12 @@ export async function getAllVoterEstamentosAsync(rutVotante: string): Promise<Vo
         label,
         nombreEstablecimiento: r.nombreEstablecimiento,
         rbdEstablecimiento: r.rbdEstablecimiento,
-        haVotado: r.haVotado,
+        haVotado: isVoted,
         habilitado: r.habilitado,
       });
     } else {
       const existing = map.get(est)!;
-      if (r.haVotado) existing.haVotado = true;
+      if (isVoted) existing.haVotado = true;
     }
   });
 
