@@ -31,9 +31,11 @@ export async function POST(request: NextRequest) {
     const { records: votes } = await getVotingRecordsAsync();
     const tallies = getVoteTallies(slepId);
 
-    const totalPadron = padron.length;
+    const uniquePadronRuts = new Set(padron.map((p) => p.rutVotante.replace(/[^0-9kK]/g, '').toUpperCase()));
+    const totalPadron = uniquePadronRuts.size;
     const totalVotesCast = votes.length;
     const porcentajeParticipacion = totalPadron > 0 ? ((totalVotesCast / totalPadron) * 100).toFixed(1) : '0';
+
 
     const resultadosCandidatos = candidates.map((c) => ({
       id: c.id,

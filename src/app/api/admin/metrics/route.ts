@@ -75,19 +75,37 @@ export async function GET(request: NextRequest) {
   };
 
   if (padronRecords.length > 0) {
-    const uniqueRuts = new Set(
+    const uniqueRutsByEstamento = {
+      directivos: new Set<string>(),
+      docentes: new Set<string>(),
+      asistentes: new Set<string>(),
+      apoderados: new Set<string>(),
+      estudiantes: new Set<string>(),
+    };
+
+    padronRecords.forEach((p) => {
+      const cleanR = p.rutVotante.replace(/[^0-9kK]/g, '').toUpperCase();
+      if (!cleanR) return;
+      const vars = getEstamentoVariants(p.estamento).map((v) => v.toLowerCase());
+      if (vars.includes('directivos')) uniqueRutsByEstamento.directivos.add(cleanR);
+      else if (vars.includes('docentes')) uniqueRutsByEstamento.docentes.add(cleanR);
+      else if (vars.includes('asistentes')) uniqueRutsByEstamento.asistentes.add(cleanR);
+      else if (vars.includes('apoderados')) uniqueRutsByEstamento.apoderados.add(cleanR);
+      else if (vars.includes('estudiantes')) uniqueRutsByEstamento.estudiantes.add(cleanR);
+    });
+
+    padron.directivos = uniqueRutsByEstamento.directivos.size;
+    padron.docentes = uniqueRutsByEstamento.docentes.size;
+    padron.asistentes = uniqueRutsByEstamento.asistentes.size;
+    padron.apoderados = uniqueRutsByEstamento.apoderados.size;
+    padron.estudiantes = uniqueRutsByEstamento.estudiantes.size;
+
+    const globalUniqueRuts = new Set(
       padronRecords.map((p) => p.rutVotante.replace(/[^0-9kK]/g, '').toUpperCase()),
     );
-    padron.total = uniqueRuts.size || totalPadronCount || padronRecords.length;
-    padronRecords.forEach((p) => {
-      const vars = getEstamentoVariants(p.estamento).map((v) => v.toLowerCase());
-      if (vars.includes('directivos')) padron.directivos++;
-      else if (vars.includes('docentes')) padron.docentes++;
-      else if (vars.includes('asistentes')) padron.asistentes++;
-      else if (vars.includes('apoderados')) padron.apoderados++;
-      else if (vars.includes('estudiantes')) padron.estudiantes++;
-    });
+    padron.total = globalUniqueRuts.size;
   }
+
 
   // ── Votos totales emitidos por estamento (desde acta oficial Supabase) ───
   const votes = {

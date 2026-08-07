@@ -54,6 +54,42 @@ describe('padron-store', () => {
     expect(apoderadosQuorum?.quorum30Requerido).toBeGreaterThanOrEqual(1);
   });
 
+  it('deduplica RUNs de apoderados multihijo para el cálculo del quórum mínimo y padrón total', () => {
+    const v1 = {
+      id: 'p1',
+      rutVotante: '11223344K',
+      formattedRutVotante: '11.223.344-K',
+      rutEstudianteAsociado: '234567896',
+      formattedRutEstudiante: '23.456.789-6',
+      nombreCompleto: 'Carlos Vergara',
+      estamento: 'PADRES_APODERADOS' as const,
+      rbdEstablecimiento: '10101',
+      nombreEstablecimiento: 'Liceo Test',
+      slepId: 'slep-test',
+      schoolId: '10101',
+      habilitado: true,
+      haVotado: true,
+      fechaVoto: new Date().toISOString(),
+      createdAt: new Date().toISOString(),
+    };
+
+    const v2 = {
+      ...v1,
+      id: 'p2',
+      rutEstudianteAsociado: '245678907',
+      formattedRutEstudiante: '24.567.890-7',
+    };
+
+    const quorums = calculateEstamentoQuorums([v1, v2]);
+    const apoderadosQ = quorums.find((q) => q.estamento === 'PADRES_APODERADOS');
+
+    expect(apoderadosQ).toBeDefined();
+    expect(apoderadosQ?.padronTotal).toBe(1);
+    expect(apoderadosQ?.votosEmitidos).toBe(1);
+    expect(apoderadosQ?.porcentajeParticipacion).toBe(100);
+  });
+
+
 
 
 

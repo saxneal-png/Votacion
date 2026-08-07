@@ -134,9 +134,20 @@ export function calculateEstamentoQuorums(records: PadronRecord[] = padronStore)
 
   return estamentoMeta.map(({ estamento, label }) => {
     const recordsByEstamento = records.filter((r) => r.estamento === estamento && r.habilitado);
-    const padronTotal = recordsByEstamento.length;
+    // Contar electores ÚNICOS por RUT en este estamento (evita multiplicar apoderados con varios hijos)
+    const uniqueRutVotantes = new Set(
+      recordsByEstamento.map((r) => r.rutVotante.replace(/[^0-9kK]/g, '').toUpperCase()),
+    );
+    const padronTotal = uniqueRutVotantes.size;
     const quorum30Requerido = Math.ceil(padronTotal * 0.3);
-    const votosEmitidos = recordsByEstamento.filter((r) => r.haVotado).length;
+
+    // Contar votos emitidos ÚNICOS por RUT en este estamento
+    const uniqueVotosEmitidos = new Set(
+      recordsByEstamento
+        .filter((r) => r.haVotado)
+        .map((r) => r.rutVotante.replace(/[^0-9kK]/g, '').toUpperCase()),
+    );
+    const votosEmitidos = uniqueVotosEmitidos.size;
     const porcentajeParticipacion = padronTotal > 0 ? Number(((votosEmitidos / padronTotal) * 100).toFixed(1)) : 0;
 
     return {
@@ -150,6 +161,7 @@ export function calculateEstamentoQuorums(records: PadronRecord[] = padronStore)
     };
   });
 }
+
 
 /**
  * Extrae de forma dinámica todos los establecimientos reales presentes en el padrón
