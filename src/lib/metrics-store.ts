@@ -54,14 +54,12 @@ export function getVoteTallies(_slepId?: string, _schoolId?: string): ReadonlyMa
  * Obtiene el escrutinio actualizado de votos por candidato consultando la tabla `votos_anonimos` en Supabase
  */
 export async function getVoteTalliesAsync(_slepId?: string, _schoolId?: string): Promise<Map<string, number>> {
-  const map = new Map<string, number>(voteTallies);
-
   if (!supabaseAdmin) {
-    return map;
+    return new Map<string, number>(voteTallies);
   }
 
   try {
-    // Paginación por lotes de 1.000 filas para evitar truncamiento de PostgREST
+    const supabaseMap = new Map<string, number>();
     const BATCH_SIZE = 1000;
     let page = 0;
     let hasMore = true;
@@ -77,7 +75,7 @@ export async function getVoteTalliesAsync(_slepId?: string, _schoolId?: string):
 
       if (error) {
         console.error('[SUPABASE] Error obteniendo escrutinio de votos:', error?.message);
-        break;
+        return new Map<string, number>(voteTallies);
       }
 
       if (!data || data.length === 0) {
@@ -88,7 +86,7 @@ export async function getVoteTalliesAsync(_slepId?: string, _schoolId?: string):
       data.forEach((row: { candidate_id: string }) => {
         const cid = String(row.candidate_id ?? '').trim();
         if (cid) {
-          map.set(cid, (map.get(cid) ?? 0) + 1);
+          supabaseMap.set(cid, (supabaseMap.get(cid) ?? 0) + 1);
         }
       });
 
@@ -99,10 +97,10 @@ export async function getVoteTalliesAsync(_slepId?: string, _schoolId?: string):
       }
     }
 
-    return map;
+    return supabaseMap.size > 0 ? supabaseMap : new Map<string, number>(voteTallies);
   } catch (err) {
     console.error('[SUPABASE] Excepción obteniendo escrutinio de votos:', err);
-    return map;
+    return new Map<string, number>(voteTallies);
   }
 }
 

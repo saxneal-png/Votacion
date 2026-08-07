@@ -88,7 +88,7 @@ export function LoginView({
       <div className="mb-4 pb-4 border-b border-slate-900/[0.08]">
         <div className="flex items-start justify-between gap-3">
           <h1 className="mt-0 mb-0 font-serif text-[clamp(20px,2.6vw,28px)] text-[#0c2138] leading-none tracking-tight">
-            {isSimplifiedMode ? 'Ingresa tus datos' : 'Ingresa para votar'}
+            {isSimplifiedMode ? 'Ingresa tus datos' : 'Identificación del Votante'}
           </h1>
           <HelpTooltip
             title="Identificación por Estamento"
@@ -98,8 +98,44 @@ export function LoginView({
         <p className="mt-2 mb-0 text-sm text-slate-500 font-sans leading-relaxed">
           {isSimplifiedMode
             ? 'Ingresa tu RUN de Apoderado, el RUN de tu estudiante y tu correo.'
-            : 'Por defecto estás ingresando como Apoderado(a). Si eres funcionario del establecimiento o SLEP, cambia a la pestaña "Funcionario".'}
+            : 'Bienvenido(a) al Portal Electoral Institucional. Por favor, selecciona tu estamento e ingresa tus credenciales acreditadas para continuar.'}
         </p>
+      </div>
+
+      {/* Guía Clara del Proceso de Votación */}
+      <div className="mb-5 p-4 rounded-2xl bg-gradient-to-r from-blue-50/90 via-sky-50/70 to-blue-50/90 border border-blue-200/80 shadow-xs">
+        <h2 className="text-xs font-bold font-sans uppercase tracking-wider text-[#0b5294] flex items-center gap-2 mb-2.5">
+          <span>ℹ️ Instrucciones del Proceso de Votación</span>
+        </h2>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div className="flex items-start gap-2.5 p-2.5 rounded-xl bg-white/90 border border-blue-100 shadow-2xs">
+            <span className="flex items-center justify-center shrink-0 w-6 h-6 rounded-full bg-[#0b5294] text-white font-sans text-xs font-bold">1</span>
+            <div>
+              <p className="text-xs font-bold font-sans text-slate-800 m-0">1. Identificación</p>
+              <p className="text-[11px] text-slate-600 font-sans m-0 mt-0.5 leading-snug">
+                Selecciona tu estamento e ingresa tu RUN y correo. Si eres apoderado, suma el RUN del estudiante.
+              </p>
+            </div>
+          </div>
+          <div className="flex items-start gap-2.5 p-2.5 rounded-xl bg-white/90 border border-blue-100 shadow-2xs">
+            <span className="flex items-center justify-center shrink-0 w-6 h-6 rounded-full bg-[#0b5294] text-white font-sans text-xs font-bold">2</span>
+            <div>
+              <p className="text-xs font-bold font-sans text-slate-800 m-0">2. Enlace Mágico</p>
+              <p className="text-[11px] text-slate-600 font-sans m-0 mt-0.5 leading-snug">
+                Recibirás en tu correo un enlace directo seguro para autenticarte sin contraseña.
+              </p>
+            </div>
+          </div>
+          <div className="flex items-start gap-2.5 p-2.5 rounded-xl bg-white/90 border border-blue-100 shadow-2xs">
+            <span className="flex items-center justify-center shrink-0 w-6 h-6 rounded-full bg-[#0b5294] text-white font-sans text-xs font-bold">3</span>
+            <div>
+              <p className="text-xs font-bold font-sans text-slate-800 m-0">3. Emisión del Voto</p>
+              <p className="text-[11px] text-slate-600 font-sans m-0 mt-0.5 leading-snug">
+                Accede a tu papeleta, selecciona la candidatura de tu preferencia y confirma tu sufragio secreto.
+              </p>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Selector de Tipo de Votante */}

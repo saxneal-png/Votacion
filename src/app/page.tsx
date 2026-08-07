@@ -170,7 +170,7 @@ const SupportStrip = memo(function SupportStrip() {
 });
 
 export default function HomePage() {
-  const [appState, setAppState] = useState<AppState>('intro');
+  const [appState, setAppState] = useState<AppState>('login');
   const [voterType, setVoterType] = useState<VoterType>('apoderado');
   const [rutNumber, setRutNumber] = useState('');
   const [rutVerifier, setRutVerifier] = useState('');
@@ -280,7 +280,7 @@ export default function HomePage() {
     setIdleWarningSeconds(null);
   }
 
-  function resetAllState(nextState: AppState = 'intro') {
+  function resetAllState(nextState: AppState = 'login') {
     setRutNumber('');
     setRutVerifier('');
     setStudentRutNumber('');
@@ -453,7 +453,7 @@ export default function HomePage() {
 
     if (appState === 'success' && (!receiptCode || !confirmedCandidateName)) {
       setTransitionDirection('back');
-      resetAllState('intro');
+      resetAllState('login');
       setErrorMessage('El flujo se reinicio para evitar un estado inconsistente en la UI.');
     }
   }, [appState, confirmedCandidateName, receiptCode, user]);
@@ -473,13 +473,13 @@ export default function HomePage() {
       }
 
       if (message.kind === 'presence' || message.kind === 'state') {
-        if (appStateRef.current !== 'intro' || message.state !== 'intro') {
+        if (appStateRef.current !== 'login' || message.state !== 'login') {
           setShowMultiTabWarning(true);
         }
         channel.postMessage({ kind: 'ack', state: appStateRef.current, tabId: tabIdRef.current });
       }
 
-      if (message.kind === 'ack' && (appStateRef.current !== 'intro' || message.state !== 'intro')) {
+      if (message.kind === 'ack' && (appStateRef.current !== 'login' || message.state !== 'login')) {
         setShowMultiTabWarning(true);
       }
     };
@@ -507,7 +507,7 @@ export default function HomePage() {
       }
 
       setTransitionDirection('back');
-      resetAllState('intro');
+      resetAllState('login');
       setErrorMessage('La sesion local se reinicio para evitar datos desactualizados al volver a la pagina.');
     }
 
@@ -527,7 +527,7 @@ export default function HomePage() {
   const isOtpLocked = otpAttempts >= MAX_OTP_ATTEMPTS;
   const rut = rutNumber && rutVerifier ? `${rutNumber}-${rutVerifier}` : rutNumber;
   const currentStep = STEP_INDEX[appState];
-  const showProgress = appState !== 'intro' && appState !== 'success';
+  const showProgress = appState !== 'success';
   const guidance = STEP_GUIDANCE[appState];
   const dataExplanation = DATA_EXPLANATION[appState];
   const latencyMessage = getLatencyMessage(pendingOperation, latencyState);
@@ -716,7 +716,7 @@ export default function HomePage() {
 
   function handleRestart() {
     setTransitionDirection('back');
-    resetAllState('intro');
+    resetAllState('login');
     void resetSession();
     setErrorMessage(null);
   }
