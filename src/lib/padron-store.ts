@@ -545,6 +545,9 @@ export async function clearPadronStoreAsync(): Promise<void> {
 // ===========================================================================
 
 function mapRowToPadronRecord(item: Record<string, unknown>): PadronRecord {
+  const rawEst = String(item.estamento ?? '');
+  const normalizedEst = normalizeEstamentoDecreto102(rawEst) || (rawEst.toUpperCase() as EstamentoDecreto102);
+
   return {
     id: String(item.id ?? ''),
     rutVotante: String(item.rut_votante ?? ''),
@@ -552,7 +555,7 @@ function mapRowToPadronRecord(item: Record<string, unknown>): PadronRecord {
     rutEstudianteAsociado: item.rut_estudiante_asociado ? String(item.rut_estudiante_asociado) : null,
     formattedRutEstudiante: item.formatted_rut_estudiante ? String(item.formatted_rut_estudiante) : null,
     nombreCompleto: String(item.nombre_completo ?? ''),
-    estamento: String(item.estamento ?? '') as EstamentoDecreto102,
+    estamento: normalizedEst,
     rbdEstablecimiento: String(item.rbd_establecimiento ?? ''),
     nombreEstablecimiento: String(item.nombre_establecimiento ?? ''),
     slepId: item.slep_id ? String(item.slep_id) : 'slep-principal',
@@ -924,7 +927,6 @@ export async function findFuncionarioRecordAsync(rutFuncionario: string): Promis
     const { data, error } = await supabaseAdmin
       .from('bd_padron')
       .select('*')
-      .in('estamento', ['DOCENTES', 'ASISTENTES', 'DIRECTIVOS'])
       .or(`rut_votante.ilike.%${digits}%,formatted_rut_votante.ilike.%${digits}%`);
 
     if (error || !data || data.length === 0) {
@@ -938,7 +940,13 @@ export async function findFuncionarioRecordAsync(rutFuncionario: string): Promis
     }
 
     const records = data.map((item) => mapRowToPadronRecord(item as Record<string, unknown>));
-    return records.find((r) => r.rutVotante.replace(/[^0-9kK]/g, '').toUpperCase() === clean) ?? null;
+    return (
+      records.find(
+        (r) =>
+          ['DOCENTES', 'ASISTENTES', 'DIRECTIVOS'].includes(r.estamento) &&
+          r.rutVotante.replace(/[^0-9kK]/g, '').toUpperCase() === clean,
+      ) ?? null
+    );
   } catch (err) {
     console.error('[SUPABASE] Excepción al buscar registro de funcionario:', err);
     return (
@@ -947,6 +955,87 @@ export async function findFuncionarioRecordAsync(rutFuncionario: string): Promis
           ['DOCENTES', 'ASISTENTES', 'DIRECTIVOS'].includes(r.estamento) &&
           r.rutVotante.replace(/[^0-9kK]/g, '').toUpperCase() === clean,
       ) ?? null
+    );
+  }
+}
+
+/**
+ * Busca TODOS los registros del padrón para un RUN de funcionario (Docente/Asistente/Directivo).
+ * Esto permite soportar votantes multirrol (ej. Docente + Directivo).
+ */
+export async function findFuncionarioRecordsAsync(rutFuncionario: string): Promise<PadronRecord[]> {
+  const clean = rutFuncionario.replace(/[^0-9kK]/g, '').toUpperCase();
+  const digits = clean.replace(/[^0-9]/g, '');
+
+  if (!supabaseAdmin || !digits) {
+    return getPadronRecords().records.filter(
+      (r) =>
+        ['DOCENTES', 'ASISTENTES', 'DIRECTIVOS'].includes(r.estamento) &&
+        r.rutVotante.replace(/[^0-9kK]/g, '').toUpperCase() === clean,
+    );
+  }
+
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('bd_padron')
+      .select('*')
+      .or(`rut_votante.ilike.%${digits}%,formatted_rut_votante.ilike.%${digits}%`);
+
+    if (error || !data || data.length === 0) {
+      return getPadronRecords().records.filter(
+        (r) =>
+          ['DOCENTES', 'ASISTENTES', 'DIRECTIVOS'].includes(r.estamento) &&
+          r.rutVotante.replace(/[^0-9kK]/g, '').toUpperCase() === clean,
+      );
+    }
+
+    const records = data.map((item) => mapRowToPadronRecord(item as Record<string, unknown>));
+    return records.filter(
+      (r) =>
+        ['DOCENTES', 'ASISTENTES', 'DIRECTIVOS'].includes(r.estamento) &&
+        r.rutVotante.replace(/[^0-9kK]/g, '').toUpperCase() === clean,
+    );
+  } catch (err) {
+    console.error('[SUPABASE] Excepción al buscar registros de funcionarios multirrol:', err);
+    return getPadronRecords().records.filter(
+      (r) =>
+        ['DOCENTES', 'ASISTENTES', 'DIRECTIVOS'].includes(r.estamento) &&
+        r.rutVotante.replace(/[^0-9kK]/g, '').toUpperCase() === clean,
+    );
+  }
+}
+
+/**
+ * Busca TODOS los registros del padrón para un RUN (cualquier estamento).
+ */
+export async function findAllVoterRecordsAsync(rutVotante: string): Promise<PadronRecord[]> {
+  const clean = rutVotante.replace(/[^0-9kK]/g, '').toUpperCase();
+  const digits = clean.replace(/[^0-9]/g, '');
+
+  if (!supabaseAdmin || !digits) {
+    return getPadronRecords().records.filter(
+      (r) => r.rutVotante.replace(/[^0-9kK]/g, '').toUpperCase() === clean,
+    );
+  }
+
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('bd_padron')
+      .select('*')
+      .or(`rut_votante.ilike.%${digits}%,formatted_rut_votante.ilike.%${digits}%`);
+
+    if (error || !data || data.length === 0) {
+      return getPadronRecords().records.filter(
+        (r) => r.rutVotante.replace(/[^0-9kK]/g, '').toUpperCase() === clean,
+      );
+    }
+
+    const records = data.map((item) => mapRowToPadronRecord(item as Record<string, unknown>));
+    return records.filter((r) => r.rutVotante.replace(/[^0-9kK]/g, '').toUpperCase() === clean);
+  } catch (err) {
+    console.error('[SUPABASE] Excepción al buscar registros de votante multirrol:', err);
+    return getPadronRecords().records.filter(
+      (r) => r.rutVotante.replace(/[^0-9kK]/g, '').toUpperCase() === clean,
     );
   }
 }

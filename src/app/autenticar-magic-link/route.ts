@@ -2,7 +2,7 @@ import { type NextRequest, NextResponse } from 'next/server';
 
 import { verifyMagicToken } from '@/lib/azure-m365-service';
 import { createSession, markOtpVerified, SESSION_COOKIE_NAME } from '@/lib/server-session';
-import { consumeTempToken } from '@/services/authRulesService';
+import { consumeTempToken, getAllVoterEstamentosAsync } from '@/services/authRulesService';
 
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url);
@@ -16,6 +16,7 @@ export async function GET(request: NextRequest) {
   const tempResult = consumeTempToken(token);
   if (tempResult.valid && tempResult.payload) {
     const payload = tempResult.payload;
+    const availableEstamentos = await getAllVoterEstamentosAsync(payload.rutVotante);
 
     const sessionId = createSession({
       userRut: payload.rutVotante,
@@ -25,6 +26,7 @@ export async function GET(request: NextRequest) {
       userRbd: payload.rbdEstablecimiento,
       userOrganization: payload.nombreEstablecimiento,
       userOtp: '', // Ya verificado via magic link, no se requiere OTP
+      availableEstamentos,
     });
     markOtpVerified(sessionId);
 
@@ -48,8 +50,9 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(`${origin}/?error=${encodeURIComponent(errorMsg)}`);
   }
 
+  const availableEstamentos = await getAllVoterEstamentosAsync(verification.userRut);
+
   // Crear sesión usando los datos del token verificado
-  // verifyMagicToken solo provee userRut y estamento; usar defaults para los demás campos
   const sessionId = createSession({
     userRut: verification.userRut,
     userEmail: 'votante@slep.cl',
@@ -58,6 +61,7 @@ export async function GET(request: NextRequest) {
     userRbd: '10202',
     userOrganization: 'SLEP VALLE DIGUILLÍN',
     userOtp: '', // Ya verificado via magic link
+    availableEstamentos,
   });
   markOtpVerified(sessionId);
 

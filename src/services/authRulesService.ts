@@ -1,11 +1,14 @@
 import { cleanAndValidateRUT } from '@/lib/rut-validator';
 import {
   EstamentoDecreto102,
+  findAllVoterRecordsAsync,
   findApoderadoRecordsAsync,
   findFuncionarioRecordAsync,
+  findFuncionarioRecordsAsync,
   getPadronRecords,
   PadronRecord,
 } from '@/lib/padron-store';
+import { VoterEstamentoOption } from '@/types';
 
 
 export interface TempTokenPayload {
@@ -254,25 +257,66 @@ export async function validateFuncionarioAuthAsync(
     );
   }
 
-  let funcionarioRecord = await findFuncionarioRecordAsync(rutFuncionario);
+  const allFuncionarioRecords = await findFuncionarioRecordsAsync(rutFuncionario);
 
-
-
-  if (!funcionarioRecord) {
+  if (allFuncionarioRecords.length === 0) {
     throw new Error(
       'El RUN ingresado no se encuentra registrado como funcionario ni asociado a un establecimiento educacional en el padrón electoral.',
     );
   }
 
-  if (funcionarioRecord.haVotado) {
-    throw new Error('Usted ya emitió su voto correspondiente al estamento de Funcionarios.');
-  }
+  // Buscar un registro pendiente de voto
+  let funcionarioRecord = allFuncionarioRecords.find((r) => !r.haVotado && r.habilitado);
 
-  if (!funcionarioRecord.habilitado) {
-    throw new Error('El funcionario se encuentra inhabilitado en el padrón electoral.');
+  // Si no hay pendientes pero existen registros, verificar si todos ya votaron
+  if (!funcionarioRecord) {
+    const allVoted = allFuncionarioRecords.every((r) => r.haVotado);
+    if (allVoted) {
+      throw new Error('Usted ya emitió su voto correspondiente a sus estamentos asignados.');
+    }
+    // Si hay inhabilitados
+    funcionarioRecord = allFuncionarioRecords[0];
+    if (!funcionarioRecord.habilitado) {
+      throw new Error('El funcionario se encuentra inhabilitado en el padrón electoral.');
+    }
   }
 
   return funcionarioRecord;
+}
+
+/**
+ * Obtener la lista completa de estamentos habilitados y estado de voto para un RUT de votante.
+ * Permite soportar votantes multirrol (Docentes, Directivos, Apoderados, etc.)
+ */
+export async function getAllVoterEstamentosAsync(rutVotante: string): Promise<VoterEstamentoOption[]> {
+  const records = await findAllVoterRecordsAsync(rutVotante);
+  const map = new Map<string, VoterEstamentoOption>();
+
+  records.forEach((r) => {
+    const est = r.estamento;
+    if (!map.has(est)) {
+      let label = 'Docentes';
+      if (est === 'PADRES_APODERADOS') label = 'Padres y Apoderados';
+      else if (est === 'DOCENTES') label = 'Docentes';
+      else if (est === 'DIRECTIVOS') label = 'Equipo Directivo';
+      else if (est === 'ASISTENTES') label = 'Asistentes de la Educación';
+      else if (est === 'ESTUDIANTES') label = 'Estudiantes';
+
+      map.set(est, {
+        estamento: est,
+        label,
+        nombreEstablecimiento: r.nombreEstablecimiento,
+        rbdEstablecimiento: r.rbdEstablecimiento,
+        haVotado: r.haVotado,
+        habilitado: r.habilitado,
+      });
+    } else {
+      const existing = map.get(est)!;
+      if (r.haVotado) existing.haVotado = true;
+    }
+  });
+
+  return Array.from(map.values());
 }
 
 

@@ -4,6 +4,7 @@ import { sendOtpEmailViaGraph } from '@/lib/azure-m365-service';
 import { createSession, SESSION_COOKIE_NAME } from '@/lib/server-session';
 import {
   createTempToken,
+  getAllVoterEstamentosAsync,
   validateApoderadoAuthAsync,
   validateFuncionarioAuthAsync,
 } from '@/services/authRulesService';
@@ -57,7 +58,7 @@ export async function POST(request: Request) {
       );
     }
 
-
+    const availableEstamentos = await getAllVoterEstamentosAsync(matchedRecord.rutVotante);
     const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
 
     const sessionId = createSession({
@@ -68,6 +69,7 @@ export async function POST(request: Request) {
       userRbd: matchedRecord.rbdEstablecimiento,
       userOrganization: matchedRecord.nombreEstablecimiento,
       userOtp: otpCode,
+      availableEstamentos,
     });
 
     // Generar Token Temporal de Acceso (10 min)
@@ -80,7 +82,6 @@ export async function POST(request: Request) {
       nombreEstablecimiento: matchedRecord.nombreEstablecimiento,
       emailDestino: email,
     });
-
 
     // Despachar correo vía M365 / Azure AD Graph API (o Simulación)
     await sendOtpEmailViaGraph({
@@ -97,6 +98,7 @@ export async function POST(request: Request) {
       email,
       organization: matchedRecord.nombreEstablecimiento,
       estamento: matchedRecord.estamento.toLowerCase(),
+      availableEstamentos,
       otp: otpCode,
     };
 

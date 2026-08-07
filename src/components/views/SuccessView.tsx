@@ -5,6 +5,9 @@ interface SuccessViewProps {
   receiptIssuedAt: string;
   isDemoMode: boolean;
   isPrivacyMode: boolean;
+  hasPendingBallots?: boolean;
+  pendingCount?: number;
+  onContinueToBallotSelector?: () => void;
   onRestart: () => void;
 }
 
@@ -24,7 +27,18 @@ function formatReceiptDate(value: string) {
   }
 }
 
-export function SuccessView({ voterName, candidateName, receiptCode, receiptIssuedAt, isDemoMode, isPrivacyMode, onRestart }: SuccessViewProps) {
+export function SuccessView({
+  voterName,
+  candidateName,
+  receiptCode,
+  receiptIssuedAt,
+  isDemoMode,
+  isPrivacyMode,
+  hasPendingBallots = false,
+  pendingCount = 0,
+  onContinueToBallotSelector,
+  onRestart,
+}: SuccessViewProps) {
   const displayName = isPrivacyMode ? 'Participante' : voterName.split(/\s+/).filter(Boolean)[0] ?? voterName;
   const formattedIssuedAt = formatReceiptDate(receiptIssuedAt);
 
@@ -54,6 +68,27 @@ export function SuccessView({ voterName, candidateName, receiptCode, receiptIssu
             {displayName}, tu preferencia fue registrada correctamente.
           </p>
         </div>
+
+        {hasPendingBallots ? (
+          <div className="w-full p-4 rounded-2xl bg-amber-50 border border-amber-200 text-left grid gap-2 shadow-sm animate-pulse-subtle">
+            <div className="flex items-center gap-2">
+              <span className="text-xl">📋</span>
+              <h3 className="m-0 font-serif font-bold text-amber-900 text-base">
+                ¡Tienes {pendingCount > 0 ? pendingCount : 1} papeleta{pendingCount > 1 ? 's' : ''} pendiente{pendingCount > 1 ? 's' : ''} por votar!
+              </h3>
+            </div>
+            <p className="m-0 text-xs text-amber-950 font-sans leading-relaxed">
+              Tu RUN está registrado en múltiples estamentos. Puedes ingresar a tus papeletas restantes y votar utilizando esta misma sesión.
+            </p>
+            <button
+              type="button"
+              onClick={onContinueToBallotSelector}
+              className="mt-1 inline-flex items-center justify-center h-11 px-5 rounded-xl bg-amber-600 hover:bg-amber-700 active:scale-[0.99] text-white font-sans text-sm font-bold tracking-wide shadow-md transition-all focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-amber-500/30"
+            >
+              🗳️ Ir a mi siguiente Papeleta
+            </button>
+          </div>
+        ) : null}
 
         <div className="w-full flex flex-wrap items-center justify-center gap-2">
           <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-bold font-sans uppercase tracking-[0.14em] border border-emerald-200 bg-emerald-50 text-emerald-700">
@@ -98,7 +133,9 @@ export function SuccessView({ voterName, candidateName, receiptCode, receiptIssu
               <span className="block text-[10px] font-bold font-sans uppercase tracking-[0.14em] text-ink-muted mb-1">
                 Estado del flujo
               </span>
-              <strong className="block text-[14px] font-sans text-ink">Sesion cerrada y registrada</strong>
+              <strong className="block text-[14px] font-sans text-ink">
+                {hasPendingBallots ? 'Papeleta emitida - Pendiente(s) restante(s)' : 'Sesión cerrada y registrada'}
+              </strong>
             </div>
             <div>
               <span className="block text-[10px] font-bold font-sans uppercase tracking-[0.14em] text-ink-muted mb-1">
@@ -120,7 +157,7 @@ export function SuccessView({ voterName, candidateName, receiptCode, receiptIssu
           type="button"
           onClick={onRestart}
         >
-          🗳️ Volver al Inicio
+          {hasPendingBallots ? '📋 Selector de Papeletas / Finalizar' : '🗳️ Volver al Inicio'}
         </button>
       </div>
     </section>

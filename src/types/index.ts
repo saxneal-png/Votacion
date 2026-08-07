@@ -6,11 +6,22 @@ export interface TenantContext {
   rbd?: string;
 }
 
+export interface VoterEstamentoOption {
+  estamento: string;
+  label: string;
+  nombreEstablecimiento: string;
+  rbdEstablecimiento: string;
+  haVotado: boolean;
+  habilitado: boolean;
+}
+
 export interface User extends TenantContext {
   fullName: string;
   organization: string;
   estamento: Estamento;
   studentRut?: string;
+  rut?: string;
+  availableEstamentos?: VoterEstamentoOption[];
 }
 
 export interface Candidate extends TenantContext {
@@ -31,7 +42,7 @@ export interface Candidate extends TenantContext {
   fotoPerfil?: string;
 }
 
-export type AppState = 'intro' | 'login' | 'otp' | 'vote' | 'success';
+export type AppState = 'intro' | 'login' | 'otp' | 'ballot-select' | 'vote' | 'success';
 
 // ---------------------------------------------------------------------------
 // Admin metrics types

@@ -1,4 +1,5 @@
 import { randomUUID } from 'crypto';
+import type { VoterEstamentoOption } from '@/types';
 
 export const SESSION_COOKIE_NAME = 'voting_session';
 
@@ -6,7 +7,7 @@ interface SessionRecord {
   userRut: string;
   /** Correo electrónico real con el que el votante se autenticó */
   userEmail: string;
-  /** Estamento real del votante (padres_apoderados, docentes, asistentes, directivos, estudiantes) */
+  /** Estamento activo actual del votante (padres_apoderados, docentes, asistentes, directivos, estudiantes) */
   userEstamento: string;
   /** Nombre completo del votante según el padrón */
   userFullName: string;
@@ -19,6 +20,8 @@ interface SessionRecord {
   otpVerified: boolean;
   otpAttempts: number;
   createdAt: number;
+  availableEstamentos?: VoterEstamentoOption[];
+  activeEstamento?: string;
 }
 
 const MAX_OTP_ATTEMPTS = 3;
@@ -60,6 +63,7 @@ export function createSession(params: {
   userRbd: string;
   userOrganization: string;
   userOtp: string;
+  availableEstamentos?: VoterEstamentoOption[];
 }) {
   const sessionId = randomUUID();
   sessionStore.set(sessionId, {
@@ -73,6 +77,8 @@ export function createSession(params: {
     otpVerified: false,
     otpAttempts: 0,
     createdAt: Date.now(),
+    availableEstamentos: params.availableEstamentos,
+    activeEstamento: params.userEstamento.toLowerCase(),
   });
   return sessionId;
 }
@@ -134,6 +140,26 @@ export function markUserAsVoted(userRut: string, userEstamento: string = '') {
   const cleanEst = userEstamento.toLowerCase().trim();
   const key = cleanEst ? `${cleanRut}:${cleanEst}` : cleanRut;
   votedUsers.add(key);
+}
+
+export function setActiveEstamento(sessionId: string, estamento: string) {
+  const session = sessionStore.get(sessionId);
+  if (!session) return;
+
+  session.userEstamento = estamento.toLowerCase();
+  session.activeEstamento = estamento.toLowerCase();
+}
+
+export function markEstamentoVotedInSession(sessionId: string, estamento: string) {
+  const session = sessionStore.get(sessionId);
+  if (!session || !session.availableEstamentos) return;
+
+  const target = session.availableEstamentos.find(
+    (e) => e.estamento.toLowerCase() === estamento.toLowerCase(),
+  );
+  if (target) {
+    target.haVotado = true;
+  }
 }
 
 export function clearVotedUsers() {

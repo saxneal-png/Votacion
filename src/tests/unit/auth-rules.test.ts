@@ -84,7 +84,7 @@ describe('Motor de Reglas de Autenticación, Multirrol y Sufragio Único (Decret
     });
   });
 
-  describe('Regla C: Independencia de Doble Rol (Docente + Apoderado)', () => {
+  describe('Regla C: Independencia de Doble Rol (Docente + Apoderado) y Multirrol (Docente + Directivo)', () => {
     it('el sufragio como Apoderado no inhabilita el voto como Docente (roles independientes)', () => {
       // Marcar voto como Apoderado
       markVotoEmitido('16940271-k', 'PADRES_APODERADOS');
@@ -93,6 +93,34 @@ describe('Motor de Reglas de Autenticación, Multirrol y Sufragio Único (Decret
       const docRecord = validateFuncionarioAuth('16940271-k', 'maria.gonzalez@eduvallediguillin.gob.cl');
       expect(docRecord).toBeDefined();
       expect(docRecord.haVotado).toBe(false);
+    });
+
+    it('permite a un docente registrado también como directivo votar en ambas papeletas', async () => {
+      // Registrar segundo estamento DIRECTIVOS para el mismo RUN
+      addSingleVoter({
+        rutVotante: '16.940.271-K',
+        nombreCompleto: 'María González Pérez',
+        estamento: 'DIRECTIVOS',
+        rbdEstablecimiento: '10202',
+        nombreEstablecimiento: 'Escuela Martín Prado',
+      });
+
+      const records = getPadronRecords().records;
+      const userRecords = records.filter((r) => r.rutVotante === '16940271K');
+      expect(userRecords.length).toBe(2);
+
+      // 1. Emitir voto en Docentes
+      markVotoEmitido('16940271-k', 'DOCENTES');
+
+      // 2. El estamento Directivos debe seguir pendiente
+      const directivoRecord = userRecords.find((r) => r.estamento === 'DIRECTIVOS');
+      expect(directivoRecord?.haVotado).toBe(false);
+
+      // 3. Emitir voto en Directivos
+      markVotoEmitido('16940271-k', 'DIRECTIVOS');
+
+      // 4. Ambos deben estar marcados como votados
+      expect(userRecords.every((r) => r.haVotado)).toBe(true);
     });
   });
 

@@ -4,6 +4,7 @@ import React, { memo, useEffect, useRef, useState } from 'react';
 
 import { AccessibilityPanel } from '@/components/AccessibilityPanel';
 import { HelpTooltip } from '@/components/HelpTooltip';
+import { BallotSelectionView } from '@/components/views/BallotSelectionView';
 import { IntroView } from '@/components/views/IntroView';
 import { LoginView, VoterType } from '@/components/views/LoginView';
 import { OtpView } from '@/components/views/OtpView';
@@ -16,7 +17,7 @@ import {
   verifyOtpCode,
   verifyUserCredentials,
 } from '@/lib/api-client';
-import type { AppState, Candidate, User } from '@/types';
+import type { AppState, Candidate, User, VoterEstamentoOption } from '@/types';
 
 const VOTING_WINDOW_SECONDS = 120;
 const MAX_LOGIN_ATTEMPTS = 5;
@@ -35,6 +36,7 @@ const STEP_INDEX: Record<AppState, number> = {
   intro: 0,
   login: 0,
   otp: 1,
+  'ballot-select': 1,
   vote: 2,
   success: 3,
 };
@@ -42,6 +44,7 @@ const STEP_INDEX: Record<AppState, number> = {
 const STEP_GUIDANCE: Partial<Record<AppState, { current: string; next: string }>> = {
   login: { current: 'Identificacion', next: 'Completa RUT y correo institucional.' },
   otp: { current: 'Verificacion', next: 'Ingresa el codigo OTP de 6 digitos.' },
+  'ballot-select': { current: 'Seleccion de Papeleta', next: 'Selecciona la papeleta en la que deseas votar.' },
   vote: { current: 'Papeleta', next: 'Selecciona una candidatura y confirma una sola vez.' },
 };
 
@@ -54,6 +57,10 @@ const DATA_EXPLANATION: Partial<Record<AppState, { title: string; detail: string
     title: 'Por que pedimos el codigo OTP',
     detail: 'El codigo confirma que quien continua el flujo tiene acceso al canal institucional asociado al registro.',
   },
+  'ballot-select': {
+    title: 'Papeletas acreditadas para tu RUN',
+    detail: 'Como votante registrado en múltiples estamentos, puedes ingresar a cada papeleta correspondiente desde este panel.',
+  },
   vote: {
     title: 'Por que mostramos el padron',
     detail: 'El padron visible te ayuda a comprobar que la papeleta corresponde a tu estamento antes de confirmar el voto.',
@@ -63,9 +70,10 @@ const DATA_EXPLANATION: Partial<Record<AppState, { title: string; detail: string
 const ALLOWED_TRANSITIONS: Record<AppState, AppState[]> = {
   intro: ['login'],
   login: ['otp'],
-  otp: ['login', 'vote'],
-  vote: ['login', 'success'],
-  success: ['intro'],
+  otp: ['login', 'ballot-select', 'vote'],
+  'ballot-select': ['login', 'vote'],
+  vote: ['login', 'ballot-select', 'success'],
+  success: ['intro', 'ballot-select'],
 };
 
 function formatShortTimer(totalSeconds: number) {
@@ -196,6 +204,7 @@ export default function HomePage() {
   const [isWindowHidden, setIsWindowHidden] = useState(false);
   const [pendingOperation, setPendingOperation] = useState<PendingOperation>(null);
   const [latencyState, setLatencyState] = useState<LatencyState>('idle');
+  const [hasPendingBallots, setHasPendingBallots] = useState(false);
 
   const appStateRef = useRef(appState);
   const idleResetRef = useRef<() => void>(() => undefined);
@@ -219,14 +228,22 @@ export default function HomePage() {
           const data = (await res.json()) as { authenticated: boolean; user?: User };
           if (data.authenticated && data.user) {
             setUser(data.user);
-            setIsLoadingCandidates(true);
-            const availableCandidates = await getCandidates();
-            setCandidates(availableCandidates);
-            setRemainingSeconds(VOTING_WINDOW_SECONDS);
-            setSelectedCandidateId(null);
-            setTransitionDirection('forward');
-            setAppState('vote');
-            setIsLoadingCandidates(false);
+            const estamentos = data.user.availableEstamentos || [];
+            const unvoted = estamentos.filter((e) => e.habilitado && !e.haVotado);
+
+            if (estamentos.length > 1 || unvoted.length > 1) {
+              setTransitionDirection('forward');
+              setAppState('ballot-select');
+            } else {
+              setIsLoadingCandidates(true);
+              const availableCandidates = await getCandidates();
+              setCandidates(availableCandidates);
+              setRemainingSeconds(VOTING_WINDOW_SECONDS);
+              setSelectedCandidateId(null);
+              setTransitionDirection('forward');
+              setAppState('vote');
+              setIsLoadingCandidates(false);
+            }
           }
         }
       } catch (err) {
@@ -581,6 +598,58 @@ export default function HomePage() {
     setIsLoadingCandidates(true);
 
     try {
+      let currentUser = user;
+      const sessionRes = await fetch('/api/session', { credentials: 'same-origin' });
+      if (sessionRes.ok) {
+        const sessionData = (await sessionRes.json()) as { authenticated?: boolean; user?: User };
+        if (sessionData.authenticated && sessionData.user) {
+          currentUser = sessionData.user;
+          setUser(sessionData.user);
+        }
+      }
+
+      const estamentos = currentUser?.availableEstamentos || [];
+      const unvoted = estamentos.filter((e) => e.habilitado && !e.haVotado);
+      const hasMultiple = estamentos.length > 1 || unvoted.length > 1;
+
+      if (hasMultiple) {
+        setTransitionDirection('forward');
+        transitionTo('ballot-select');
+      } else {
+        const availableCandidates = await runMeasuredRequest('ballot', () => getCandidates());
+        setCandidates(availableCandidates);
+        setRemainingSeconds(VOTING_WINDOW_SECONDS);
+        setSelectedCandidateId(null);
+        setTransitionDirection('forward');
+        transitionTo('vote');
+      }
+    } catch {
+      setErrorMessage('No fue posible cargar la papeleta en este momento.');
+    } finally {
+      setIsLoadingCandidates(false);
+      setIsSubmitting(false);
+    }
+  }
+
+  async function handleSelectEstamento(estamentoKey: string) {
+    if (isSubmitting) return;
+    setIsSubmitting(true);
+    setErrorMessage(null);
+
+    try {
+      const res = await fetch('/api/session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ estamento: estamentoKey }),
+      });
+      if (res.ok) {
+        const data = (await res.json()) as { user?: User };
+        if (data.user) {
+          setUser(data.user);
+        }
+      }
+
+      setIsLoadingCandidates(true);
       const availableCandidates = await runMeasuredRequest('ballot', () => getCandidates());
       setCandidates(availableCandidates);
       setRemainingSeconds(VOTING_WINDOW_SECONDS);
@@ -588,7 +657,7 @@ export default function HomePage() {
       setTransitionDirection('forward');
       transitionTo('vote');
     } catch {
-      setErrorMessage('No fue posible cargar la papeleta en este momento.');
+      setErrorMessage('No fue posible ingresar a la papeleta seleccionada.');
     } finally {
       setIsLoadingCandidates(false);
       setIsSubmitting(false);
@@ -619,6 +688,16 @@ export default function HomePage() {
       setReceiptIssuedAt(new Date().toISOString());
       const candName = result?.candidate?.nombreCompleto || result?.candidate?.name || 'la candidatura seleccionada';
       setConfirmedCandidateName(candName);
+
+      const resAny = result as Record<string, unknown>;
+      const pending = Boolean(resAny.hasPendingBallots);
+      setHasPendingBallots(pending);
+
+      if (resAny.availableEstamentos && Array.isArray(resAny.availableEstamentos)) {
+        setUser((prev) =>
+          prev ? { ...prev, availableEstamentos: resAny.availableEstamentos as VoterEstamentoOption[] } : null,
+        );
+      }
 
       setTransitionDirection('forward');
       transitionTo('success');
@@ -863,6 +942,16 @@ export default function HomePage() {
               />
             ) : null}
 
+            {appState === 'ballot-select' && user ? (
+              <BallotSelectionView
+                user={user}
+                availableEstamentos={user.availableEstamentos || []}
+                isSubmitting={isSubmitting}
+                onSelectEstamento={handleSelectEstamento}
+                onExitSession={handleRestart}
+              />
+            ) : null}
+
             {appState === 'vote' ? (
               isLoadingCandidates ? (
                 <section className="rounded-2xl bg-white/95 border border-slate-900/10 p-5">
@@ -926,6 +1015,12 @@ export default function HomePage() {
                 receiptIssuedAt={receiptIssuedAt}
                 isDemoMode={isDemoMode}
                 isPrivacyMode={isPrivacyMode}
+                hasPendingBallots={hasPendingBallots}
+                pendingCount={(user?.availableEstamentos || []).filter((e) => e.habilitado && !e.haVotado).length}
+                onContinueToBallotSelector={() => {
+                  setTransitionDirection('forward');
+                  transitionTo('ballot-select');
+                }}
                 onRestart={handleRestart}
               />
             ) : null}

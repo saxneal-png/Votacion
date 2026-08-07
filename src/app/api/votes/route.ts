@@ -9,9 +9,11 @@ import {
   destroySession,
   getSession,
   hasUserVoted,
+  markEstamentoVotedInSession,
   markUserAsVoted,
   SESSION_COOKIE_NAME,
 } from '@/lib/server-session';
+import { getAllVoterEstamentosAsync } from '@/services/authRulesService';
 import { checkVotingWindowStatusAsync } from '@/lib/election-config-store';
 import type { Estamento } from '@/types';
 
@@ -139,31 +141,51 @@ export async function POST(request: Request) {
 
     const candidateName = candidate.nombreCompleto || candidate.name || candidateId;
 
-    // Destroy the session immediately after voting
-    destroySession(sessionId);
+    // Actualizar estado de estamentos en la sesión
+    if (sessionId) {
+      markEstamentoVotedInSession(sessionId, userEstamento);
+    }
+    const updatedEstamentos = await getAllVoterEstamentosAsync(userRut);
+    if (session) {
+      session.availableEstamentos = updatedEstamentos;
+    }
+
+    const pendingEstamentos = updatedEstamentos.filter((e) => e.habilitado && !e.haVotado);
+    const hasPendingBallots = pendingEstamentos.length > 0;
+
+    // Si NO quedan papeletas pendientes, destruir la sesión inmediatamente
+    if (!hasPendingBallots) {
+      destroySession(sessionId);
+    }
+
     const response = NextResponse.json({
       success: true,
       message: `Voto emitido correctamente para ${candidateName}.`,
       receiptCode: voteResult.receiptCode || voteResult.comprobanteId,
       folio: voteResult.folio || voteResult.comprobanteId,
       voterName: userFullName,
+      hasPendingBallots,
+      pendingEstamentos,
+      availableEstamentos: updatedEstamentos,
       candidate: {
         ...candidate,
         name: candidateName,
         nombreCompleto: candidateName,
       },
-
     });
 
-    response.cookies.set({
-      name: SESSION_COOKIE_NAME,
-      value: '',
-      httpOnly: true,
-      sameSite: 'lax',
-      secure: process.env.NODE_ENV === 'production',
-      path: '/',
-      maxAge: 0,
-    });
+    if (!hasPendingBallots) {
+      response.cookies.set({
+        name: SESSION_COOKIE_NAME,
+        value: '',
+        httpOnly: true,
+        sameSite: 'lax',
+        secure: process.env.NODE_ENV === 'production',
+        path: '/',
+        maxAge: 0,
+      });
+    }
+
     return response;
   } catch (error) {
     return NextResponse.json(
