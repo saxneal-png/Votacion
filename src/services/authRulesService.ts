@@ -6,8 +6,11 @@ import {
   findFuncionarioRecordAsync,
   findFuncionarioRecordsAsync,
   getPadronRecords,
+  normalizeEstamentoDecreto102,
   PadronRecord,
 } from '@/lib/padron-store';
+import { hasUserVoted } from '@/lib/server-session';
+import { supabaseAdmin } from '@/lib/supabase-client';
 import { VoterEstamentoOption } from '@/types';
 
 
