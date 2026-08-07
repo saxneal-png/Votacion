@@ -154,24 +154,54 @@ export async function GET(request: NextRequest) {
     padron.total = globalUniqueRuts.size;
 
 
-    // 4. Totales globales de votos emitidos
-    const votes = {
-      total: votingRecords.length,
-      directivos: 0,
-      docentes: 0,
-      asistentes: 0,
-      apoderados: 0,
-      estudiantes: 0,
-    };
+    // 4. Totales globales de votos emitidos (reconciliados con escrutinio y padrón)
+    const actaVotesMap: Record<string, number> = { directivos: 0, docentes: 0, asistentes: 0, apoderados: 0, estudiantes: 0 };
+    const padronVotedMap: Record<string, Set<string>> = { directivos: new Set(), docentes: new Set(), asistentes: new Set(), apoderados: new Set(), estudiantes: new Set() };
+
+    padronRecords.forEach((p) => {
+      if (!p.haVotado) return;
+      const cleanR = p.rutVotante.replace(/[^0-9kK]/g, '').toUpperCase();
+      if (!cleanR) return;
+      const vars = getEstamentoVariants(p.estamento).map((v) => v.toLowerCase());
+      if (vars.includes('directivos')) padronVotedMap.directivos.add(cleanR);
+      else if (vars.includes('docentes')) padronVotedMap.docentes.add(cleanR);
+      else if (vars.includes('asistentes')) padronVotedMap.asistentes.add(cleanR);
+      else if (vars.includes('apoderados')) padronVotedMap.apoderados.add(cleanR);
+      else if (vars.includes('estudiantes')) padronVotedMap.estudiantes.add(cleanR);
+    });
 
     votingRecords.forEach((v) => {
       const vars = getEstamentoVariants(v.estamento).map((val) => val.toLowerCase());
-      if (vars.includes('directivos')) votes.directivos++;
-      else if (vars.includes('docentes')) votes.docentes++;
-      else if (vars.includes('asistentes')) votes.asistentes++;
-      else if (vars.includes('apoderados')) votes.apoderados++;
-      else if (vars.includes('estudiantes')) votes.estudiantes++;
+      if (vars.includes('directivos')) actaVotesMap.directivos++;
+      else if (vars.includes('docentes')) actaVotesMap.docentes++;
+      else if (vars.includes('asistentes')) actaVotesMap.asistentes++;
+      else if (vars.includes('apoderados')) actaVotesMap.apoderados++;
+      else if (vars.includes('estudiantes')) actaVotesMap.estudiantes++;
     });
+
+    const votes = { total: 0, directivos: 0, docentes: 0, asistentes: 0, apoderados: 0, estudiantes: 0 };
+
+    const estamentoKeys: Array<{ code: string; key: keyof typeof votes }> = [
+      { code: 'DIRECTIVOS', key: 'directivos' },
+      { code: 'DOCENTES', key: 'docentes' },
+      { code: 'ASISTENTES', key: 'asistentes' },
+      { code: 'PADRES_APODERADOS', key: 'apoderados' },
+      { code: 'ESTUDIANTES', key: 'estudiantes' },
+    ];
+
+    estamentoKeys.forEach(({ code, key }) => {
+      const estamentoVariants = getEstamentoVariants(code).map((v) => v.toLowerCase());
+      const estCandidates = allCandidates.filter((c) => estamentoVariants.includes(c.estamento.toLowerCase()));
+      const candidateVotesSum = estCandidates.reduce((acc, c) => acc + (tallies.get(c.id) ?? 0), 0);
+      const padronVotedCount = padronVotedMap[key]?.size ?? 0;
+      const actaVotesCount = actaVotesMap[key] ?? 0;
+
+      votes[key] = Math.max(actaVotesCount, candidateVotesSum, padronVotedCount);
+    });
+
+    const totalReconciledVotes = Object.values(votes).reduce((a, b) => a + b, 0);
+    votes.total = Math.max(votingRecords.length, totalReconciledVotes);
+
 
     // 5. Construcción del CSV con BOM UTF-8 (\uFEFF) para Excel
     const lines: string[] = [];

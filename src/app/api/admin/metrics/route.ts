@@ -107,9 +107,8 @@ export async function GET(request: NextRequest) {
   }
 
 
-  // ── Votos totales emitidos por estamento (desde acta oficial Supabase) ───
-  const votes = {
-    total: votingRecords.length,
+  // ── Votos totales emitidos por estamento (desde acta_sufragio, padrón y escrutinio) ───
+  const actaVotesMap: Record<string, number> = {
     directivos: 0,
     docentes: 0,
     asistentes: 0,
@@ -117,15 +116,36 @@ export async function GET(request: NextRequest) {
     estudiantes: 0,
   };
 
+  const padronVotedMap: Record<string, Set<string>> = {
+    directivos: new Set(),
+    docentes: new Set(),
+    asistentes: new Set(),
+    apoderados: new Set(),
+    estudiantes: new Set(),
+  };
+
+  // Votos reportados en padrón oficial
+  padronRecords.forEach((p) => {
+    if (!p.haVotado) return;
+    const cleanR = p.rutVotante.replace(/[^0-9kK]/g, '').toUpperCase();
+    if (!cleanR) return;
+    const vars = getEstamentoVariants(p.estamento).map((v) => v.toLowerCase());
+    if (vars.includes('directivos')) padronVotedMap.directivos.add(cleanR);
+    else if (vars.includes('docentes')) padronVotedMap.docentes.add(cleanR);
+    else if (vars.includes('asistentes')) padronVotedMap.asistentes.add(cleanR);
+    else if (vars.includes('apoderados')) padronVotedMap.apoderados.add(cleanR);
+    else if (vars.includes('estudiantes')) padronVotedMap.estudiantes.add(cleanR);
+  });
+
   // Construir mapa rbd → estamentos que votaron (desde acta_sufragio real)
   const schoolsVotedRealMap = new Map<string, Set<string>>();
   votingRecords.forEach((v) => {
     const vars = getEstamentoVariants(v.estamento).map((val) => val.toLowerCase());
-    if (vars.includes('directivos')) votes.directivos++;
-    else if (vars.includes('docentes')) votes.docentes++;
-    else if (vars.includes('asistentes')) votes.asistentes++;
-    else if (vars.includes('apoderados')) votes.apoderados++;
-    else if (vars.includes('estudiantes')) votes.estudiantes++;
+    if (vars.includes('directivos')) actaVotesMap.directivos++;
+    else if (vars.includes('docentes')) actaVotesMap.docentes++;
+    else if (vars.includes('asistentes')) actaVotesMap.asistentes++;
+    else if (vars.includes('apoderados')) actaVotesMap.apoderados++;
+    else if (vars.includes('estudiantes')) actaVotesMap.estudiantes++;
 
     // Registrar participación por RBD y estamento (fuente: Supabase real)
     const rbd = v.rbdEstablecimiento?.trim();
@@ -159,6 +179,15 @@ export async function GET(request: NextRequest) {
     'estudiantes': 'ESTUDIANTES',
   };
 
+  const votes = {
+    total: 0,
+    directivos: 0,
+    docentes: 0,
+    asistentes: 0,
+    apoderados: 0,
+    estudiantes: 0,
+  };
+
   const estamentos: EstamentoResult[] = ESTAMENTO_META
     .filter(({ estamento }) => {
       // Si no hay config de estamentos, mostrar todos
@@ -167,28 +196,41 @@ export async function GET(request: NextRequest) {
       return estamentosHabilitadosSet.has(code);
     })
     .map(({ estamento, label, color }) => {
-    const estamentoVariants = getEstamentoVariants(estamento).map((v) => v.toLowerCase());
-    const estamentoCandidates = allCandidates.filter((c) =>
-      estamentoVariants.includes(c.estamento.toLowerCase()),
-    );
+      const estamentoVariants = getEstamentoVariants(estamento).map((v) => v.toLowerCase());
+      const estamentoCandidates = allCandidates.filter((c) =>
+        estamentoVariants.includes(c.estamento.toLowerCase()),
+      );
 
-    const candidateResults: CandidateResult[] = estamentoCandidates.map((c) => ({
-      id: c.id,
-      name: c.nombreCompleto || c.name,
-      initials: c.initials,
-      accentColor: c.accentColor,
-      votes: tallies.get(c.id) ?? 0,
-    }));
+      const candidateResults: CandidateResult[] = estamentoCandidates.map((c) => ({
+        id: c.id,
+        name: c.nombreCompleto || c.name,
+        initials: c.initials,
+        accentColor: c.accentColor,
+        votes: tallies.get(c.id) ?? 0,
+      }));
 
-    return {
-      estamento,
-      label,
-      color,
-      padronCount: padron[estamento] ?? 0,
-      votesCast: votes[estamento] ?? 0,
-      candidates: candidateResults,
-    };
-  });
+      // Reconciliar votos del estamento: MÁXIMO entre acta_sufragio, padrón ha_votado y suma de votos de candidatos
+      const candidateVotesSum = candidateResults.reduce((acc, c) => acc + c.votes, 0);
+      const padronVotedCount = padronVotedMap[estamento]?.size ?? 0;
+      const actaVotesCount = actaVotesMap[estamento] ?? 0;
+      const reconciledVotesCast = Math.max(actaVotesCount, candidateVotesSum, padronVotedCount);
+
+      votes[estamento] = reconciledVotesCast;
+
+      return {
+        estamento,
+        label,
+        color,
+        padronCount: padron[estamento] ?? 0,
+        votesCast: reconciledVotesCast,
+        candidates: candidateResults,
+      };
+    });
+
+  // Calcular votos totales como el mayor entre la suma reconciliada por estamento y el total de actas/votos
+  const totalReconciledVotes = Object.values(votes).reduce((a, b) => a + b, 0);
+  votes.total = Math.max(votingRecords.length, totalReconciledVotes);
+
 
   // ── Escuelas: getAllSchoolsAsync + padronRecords cargado ──
   const allSchoolsList = await getAllSchoolsAsync();

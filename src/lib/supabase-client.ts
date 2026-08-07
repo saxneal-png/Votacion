@@ -1,4 +1,6 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { formatRut } from '@/lib/rut-validator';
+
 
 const REAL_SUPABASE_URL = 'https://wpfbfvkfcpslxfgppsig.supabase.co';
 const REAL_ANON_KEY =
@@ -120,6 +122,9 @@ export async function recordVoteInSupabase({
   }
 
   const comprobanteId = `COMP-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
+  const cleanRutStr = rut.replace(/[^0-9kK]/g, '').toUpperCase();
+  const formattedRutStr = formatRut(cleanRutStr);
+
 
   // 1. Insertar el voto en la urna anónima (sin RUT)
   const { error: voteError } = await supabaseAdmin.from('votos_anonimos').insert([
@@ -131,16 +136,17 @@ export async function recordVoteInSupabase({
   ]);
 
   if (voteError) {
-    throw new Error(`Error al registrar el voto: ${voteError.message}`);
+    throw new Error(`Error al registrar el voto en la urna anónima: ${voteError.message}`);
   }
 
-  // 2. Registrar la participación (asociada al RUT pero separada del sentido del voto)
+  // 2. Registrar la participación en el acta de sufragio
   const { error: participationError } = await supabaseAdmin
     .from('acta_sufragio')
     .insert([
       {
         folio: comprobanteId,
-        rut_votante: rut.toLowerCase().trim(),
+        rut_votante: cleanRutStr,
+        formatted_rut_votante: formattedRutStr,
         email_registrado: email,
         estamento,
         rbd_establecimiento: rbd,
@@ -150,9 +156,25 @@ export async function recordVoteInSupabase({
     ]);
 
   if (participationError) {
-    console.error('Error en marca de participación:', participationError);
+    console.error('[SUPABASE] Error al registrar acta de sufragio:', participationError.message);
+    throw new Error(`Error al registrar el acta de sufragio: ${participationError.message}`);
   }
 
-  return { success: true, comprobanteId };
+  // 3. Marcar el padrón bd_padron como ha_votado = true
+  const { error: padronError } = await supabaseAdmin
+    .from('bd_padron')
+    .update({
+      ha_votado: true,
+      fecha_voto: new Date().toISOString(),
+    })
+    .or(`rut_votante.eq.${cleanRutStr},rut_votante.eq.${formattedRutStr}`)
+    .eq('estamento', estamento);
+
+  if (padronError) {
+    console.error('[SUPABASE] Error al actualizar estado ha_votado en bd_padron:', padronError.message);
+  }
+
+  return { success: true, comprobanteId, receiptCode: comprobanteId, folio: comprobanteId };
 }
+
 
