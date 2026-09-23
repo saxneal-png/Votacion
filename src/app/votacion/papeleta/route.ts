@@ -1,7 +1,7 @@
 import { type NextRequest, NextResponse } from 'next/server';
 
 import { consumeTempToken, generateBlindJwtToken } from '@/services/authRulesService';
-import { createSession, markOtpVerified, SESSION_COOKIE_NAME } from '@/lib/server-session';
+import { createSessionAsync, markOtpVerifiedAsync, SESSION_COOKIE_NAME } from '@/lib/server-session';
 
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url);
@@ -30,7 +30,7 @@ export async function GET(request: NextRequest) {
   });
 
   // Habilitar sesión de sufragio cifrada con todos los datos del votante
-  const sessionId = createSession({
+  const sessionId = await createSessionAsync({
     userRut: payload.rutVotante,
     userEmail: payload.emailDestino,
     userEstamento: payload.estamentoDestino,
@@ -39,7 +39,7 @@ export async function GET(request: NextRequest) {
     userOrganization: payload.nombreEstablecimiento,
     userOtp: '', // Ya verificado via enlace mágico (magic link)
   });
-  markOtpVerified(sessionId);
+  await markOtpVerifiedAsync(sessionId);
 
   const response = NextResponse.redirect(`${origin}/?cabina=true&blind_token=${encodeURIComponent(blindToken)}`);
   response.cookies.set({

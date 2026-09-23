@@ -6,10 +6,10 @@ import { recordVote } from '@/lib/metrics-store';
 import { recordOfficialVote } from '@/lib/voting-record-store';
 import { recordVoteInSupabase } from '@/lib/supabase-client';
 import {
-  destroySession,
-  getSession,
+  destroySessionAsync,
+  getSessionAsync,
   hasUserVoted,
-  markEstamentoVotedInSession,
+  markEstamentoVotedInSessionAsync,
   markUserAsVoted,
   SESSION_COOKIE_NAME,
 } from '@/lib/server-session';
@@ -20,7 +20,7 @@ import type { Estamento } from '@/types';
 export async function POST(request: Request) {
   const cookieStore = await cookies();
   const sessionId = cookieStore.get(SESSION_COOKIE_NAME)?.value;
-  const session = getSession(sessionId);
+  const session = await getSessionAsync(sessionId);
 
   if (!session?.otpVerified) {
     return NextResponse.json(
@@ -143,7 +143,7 @@ export async function POST(request: Request) {
 
     // Actualizar estado de estamentos en la sesión
     if (sessionId) {
-      markEstamentoVotedInSession(sessionId, userEstamento);
+      await markEstamentoVotedInSessionAsync(sessionId, userEstamento);
     }
     const updatedEstamentos = await getAllVoterEstamentosAsync(userRut);
     if (session) {
@@ -155,7 +155,7 @@ export async function POST(request: Request) {
 
     // Si NO quedan papeletas pendientes, destruir la sesión inmediatamente
     if (!hasPendingBallots) {
-      destroySession(sessionId);
+      await destroySessionAsync(sessionId);
     }
 
     const response = NextResponse.json({

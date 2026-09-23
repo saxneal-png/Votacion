@@ -1,7 +1,7 @@
 import { type NextRequest, NextResponse } from 'next/server';
 
 import { verifyMagicToken } from '@/lib/azure-m365-service';
-import { createSession, markOtpVerified, SESSION_COOKIE_NAME } from '@/lib/server-session';
+import { createSessionAsync, markOtpVerifiedAsync, SESSION_COOKIE_NAME } from '@/lib/server-session';
 import { consumeTempToken, getAllVoterEstamentosAsync } from '@/services/authRulesService';
 
 export async function GET(request: NextRequest) {
@@ -18,7 +18,7 @@ export async function GET(request: NextRequest) {
     const payload = tempResult.payload;
     const availableEstamentos = await getAllVoterEstamentosAsync(payload.rutVotante);
 
-    const sessionId = createSession({
+    const sessionId = await createSessionAsync({
       userRut: payload.rutVotante,
       userEmail: payload.emailDestino,
       userEstamento: payload.estamentoDestino,
@@ -28,7 +28,7 @@ export async function GET(request: NextRequest) {
       userOtp: '', // Ya verificado via magic link, no se requiere OTP
       availableEstamentos,
     });
-    markOtpVerified(sessionId);
+    await markOtpVerifiedAsync(sessionId);
 
     const response = NextResponse.redirect(`${origin}/?cabina=true`);
     response.cookies.set({
@@ -53,7 +53,7 @@ export async function GET(request: NextRequest) {
   const availableEstamentos = await getAllVoterEstamentosAsync(verification.userRut);
 
   // Crear sesión usando los datos del token verificado
-  const sessionId = createSession({
+  const sessionId = await createSessionAsync({
     userRut: verification.userRut,
     userEmail: 'votante@slep.cl',
     userEstamento: verification.estamento || 'docentes',
@@ -63,7 +63,7 @@ export async function GET(request: NextRequest) {
     userOtp: '', // Ya verificado via magic link
     availableEstamentos,
   });
-  markOtpVerified(sessionId);
+  await markOtpVerifiedAsync(sessionId);
 
   const response = NextResponse.redirect(`${origin}/?cabina=true`);
   response.cookies.set({

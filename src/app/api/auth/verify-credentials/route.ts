@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 
 import { sendOtpEmailViaGraph } from '@/lib/azure-m365-service';
-import { createSession, SESSION_COOKIE_NAME } from '@/lib/server-session';
+import { createSessionAsync, SESSION_COOKIE_NAME } from '@/lib/server-session';
 import {
   createTempToken,
   getAllVoterEstamentosAsync,
@@ -61,7 +61,7 @@ export async function POST(request: Request) {
     const availableEstamentos = await getAllVoterEstamentosAsync(matchedRecord.rutVotante);
     const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
 
-    const sessionId = createSession({
+    const sessionId = await createSessionAsync({
       userRut: matchedRecord.rutVotante,
       userEmail: email,
       userEstamento: matchedRecord.estamento,

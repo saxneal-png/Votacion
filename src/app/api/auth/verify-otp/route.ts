@@ -2,10 +2,10 @@ import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
 
 import {
-  destroySession,
-  getSession,
-  incrementOtpAttempts,
-  markOtpVerified,
+  destroySessionAsync,
+  getSessionAsync,
+  incrementOtpAttemptsAsync,
+  markOtpVerifiedAsync,
   MAX_OTP_ATTEMPTS,
   SESSION_COOKIE_NAME,
 } from '@/lib/server-session';
@@ -14,7 +14,7 @@ export async function POST(request: Request) {
   try {
     const cookieStore = await cookies();
     const sessionId = cookieStore.get(SESSION_COOKIE_NAME)?.value;
-    const session = getSession(sessionId);
+    const session = await getSessionAsync(sessionId);
 
     if (!session || !sessionId) {
       return NextResponse.json(
@@ -54,9 +54,9 @@ export async function POST(request: Request) {
 
     if (otp !== expectedOtp) {
       // Wrong OTP: increment server-side counter and check limit.
-      const attempts = incrementOtpAttempts(sessionId);
+      const attempts = await incrementOtpAttemptsAsync(sessionId);
       if (attempts >= MAX_OTP_ATTEMPTS) {
-        destroySession(sessionId);
+        await destroySessionAsync(sessionId);
         return NextResponse.json(
           { message: 'Demasiados intentos fallidos. La sesion ha sido cancelada.' },
           { status: 401 },
@@ -69,7 +69,7 @@ export async function POST(request: Request) {
     }
 
     // OTP correct — mark verified and return success.
-    markOtpVerified(sessionId);
+    await markOtpVerifiedAsync(sessionId);
     return NextResponse.json({ ok: true });
   } catch (error) {
     return NextResponse.json(

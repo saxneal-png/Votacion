@@ -1,13 +1,18 @@
 import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
 
-import { destroySession, getSession, setActiveEstamento, SESSION_COOKIE_NAME } from '@/lib/server-session';
+import {
+  destroySessionAsync,
+  getSessionAsync,
+  setActiveEstamentoAsync,
+  SESSION_COOKIE_NAME,
+} from '@/lib/server-session';
 import { getAllVoterEstamentosAsync } from '@/services/authRulesService';
 
 export async function GET() {
   const cookieStore = await cookies();
   const sessionId = cookieStore.get(SESSION_COOKIE_NAME)?.value;
-  const session = getSession(sessionId);
+  const session = await getSessionAsync(sessionId);
 
   if (session?.otpVerified && session.userRut) {
     let availableEstamentos = session.availableEstamentos;
@@ -34,7 +39,7 @@ export async function GET() {
 export async function POST(request: Request) {
   const cookieStore = await cookies();
   const sessionId = cookieStore.get(SESSION_COOKIE_NAME)?.value;
-  const session = getSession(sessionId);
+  const session = await getSessionAsync(sessionId);
 
   if (!sessionId || !session?.otpVerified || !session.userRut) {
     return NextResponse.json({ message: 'Sesión no válida' }, { status: 401 });
@@ -45,7 +50,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ message: 'Estamento requerido' }, { status: 400 });
   }
 
-  setActiveEstamento(sessionId, body.estamento);
+  await setActiveEstamentoAsync(sessionId, body.estamento);
 
   let availableEstamentos = session.availableEstamentos;
   if (!availableEstamentos || availableEstamentos.length === 0) {
@@ -69,7 +74,7 @@ export async function DELETE() {
   const cookieStore = await cookies();
   const sessionId = cookieStore.get(SESSION_COOKIE_NAME)?.value;
 
-  destroySession(sessionId);
+  await destroySessionAsync(sessionId);
 
   const response = new NextResponse(null, { status: 204 });
   response.cookies.set({

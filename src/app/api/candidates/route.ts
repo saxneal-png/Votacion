@@ -2,7 +2,7 @@ import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
 
 import { getCandidatosAsync } from '@/lib/candidates-store';
-import { getSession, SESSION_COOKIE_NAME } from '@/lib/server-session';
+import { getSessionAsync, SESSION_COOKIE_NAME } from '@/lib/server-session';
 import type { Estamento } from '@/types';
 
 export const dynamic = 'force-dynamic';
@@ -10,7 +10,7 @@ export const dynamic = 'force-dynamic';
 export async function GET() {
   const cookieStore = await cookies();
   const sessionId = cookieStore.get(SESSION_COOKIE_NAME)?.value;
-  const session = getSession(sessionId);
+  const session = await getSessionAsync(sessionId);
 
   if (!session?.otpVerified) {
     return NextResponse.json(
