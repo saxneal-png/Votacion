@@ -8,6 +8,7 @@ import {
   EstamentoDecreto102,
   getPadronRecordsAsync,
   toggleVoterHabilitadoAsync,
+  updateVoterRecordAsync,
 } from '@/lib/padron-store';
 
 export async function GET(request: NextRequest) {
@@ -74,6 +75,58 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     return NextResponse.json(
       { message: error instanceof Error ? error.message : 'Error al agregar votante.' },
+      { status: 400 },
+    );
+  }
+}
+
+export async function PUT(request: NextRequest) {
+  const cookieStore = await cookies();
+  const token = cookieStore.get(ADMIN_SESSION_COOKIE)?.value;
+  if (!validateAdminSession(token)) {
+    return NextResponse.json({ message: 'Sesión no autorizada.' }, { status: 401 });
+  }
+
+  try {
+    const body = (await request.json()) as {
+      id?: string;
+      rutVotante?: string;
+      rutEstudianteAsociado?: string | null;
+      nombreCompleto?: string;
+      estamento?: EstamentoDecreto102;
+      rbdEstablecimiento?: string;
+      nombreEstablecimiento?: string;
+      habilitado?: boolean;
+    };
+
+    if (
+      !body.id ||
+      !body.rutVotante ||
+      !body.nombreCompleto ||
+      !body.estamento ||
+      !body.rbdEstablecimiento ||
+      !body.nombreEstablecimiento
+    ) {
+      return NextResponse.json(
+        { message: 'Faltan campos obligatorios para actualizar al votante (id, RUN, nombre, estamento, RBD y establecimiento).' },
+        { status: 400 },
+      );
+    }
+
+    const updated = await updateVoterRecordAsync(body.id, {
+      rutVotante: body.rutVotante,
+      rutEstudianteAsociado: body.rutEstudianteAsociado,
+      nombreCompleto: body.nombreCompleto,
+      estamento: body.estamento,
+      rbdEstablecimiento: body.rbdEstablecimiento,
+      nombreEstablecimiento: body.nombreEstablecimiento,
+      habilitado: body.habilitado,
+    });
+
+    return NextResponse.json({ success: true, record: updated });
+  } catch (error) {
+    return NextResponse.json(
+      { message: error instanceof Error ? error.message : 'Error al actualizar el votante.' },
       { status: 400 },
     );
   }

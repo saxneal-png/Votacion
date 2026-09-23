@@ -8,6 +8,8 @@ import {
   normalizeEstamentoDecreto102,
   processPadronExcelBuffer,
   toggleVoterHabilitado,
+  updateVoterRecord,
+  updateVoterRecordAsync,
 } from '@/lib/padron-store';
 
 describe('rut-validator', () => {
@@ -204,6 +206,60 @@ describe('padron-store', () => {
     const chunkRes = await processPadronChunkAsync(parsed.records);
     expect(chunkRes.success).toBe(true);
     expect(chunkRes.registrosInsertados).toBe(1);
+  });
+
+  it('permite editar un votante existente corrigiendo su RUN o RUN de estudiante', async () => {
+    // 1. Agregar un apoderado con un error en el nombre o RUN
+    const created = addSingleVoter({
+      rutVotante: '15.555.666-8',
+      rutEstudianteAsociado: '23.456.789-6',
+      nombreCompleto: 'Maria Perez',
+      estamento: 'PADRES_APODERADOS',
+      rbdEstablecimiento: '10202',
+      nombreEstablecimiento: 'Escuela Martín Prado',
+    });
+
+    expect(created.nombreCompleto).toBe('Maria Perez');
+    expect(created.rutVotante).toBe('155556668');
+
+    // 2. Actualizar el votante cambiando nombre, corrigiendo RUN del estudiante y alternando habilitado
+    const updated = await updateVoterRecordAsync(created.id, {
+      rutVotante: '15.555.666-8',
+      rutEstudianteAsociado: '16.940.271-K', // Nuevo estudiante corregido
+      nombreCompleto: 'María Pérez González',
+      estamento: 'PADRES_APODERADOS',
+      rbdEstablecimiento: '10202',
+      nombreEstablecimiento: 'Escuela Martín Prado',
+      habilitado: true,
+    });
+
+    expect(updated.nombreCompleto).toBe('María Pérez González');
+    expect(updated.rutEstudianteAsociado).toBe('16940271K');
+    expect(updated.formattedRutEstudiante).toBe('16.940.271-K');
+
+    // 3. Validar que rechaza actualización con RUN inválido (Módulo 11)
+    await expect(
+      updateVoterRecordAsync(created.id, {
+        rutVotante: '15.555.666-9', // DV erróneo
+        rutEstudianteAsociado: '16.940.271-K',
+        nombreCompleto: 'María Pérez',
+        estamento: 'PADRES_APODERADOS',
+        rbdEstablecimiento: '10202',
+        nombreEstablecimiento: 'Escuela Martín Prado',
+      }),
+    ).rejects.toThrow(/RUN de votante inválido/);
+
+    // 4. Validar que para apoderados exige RUN del estudiante asociado
+    await expect(
+      updateVoterRecordAsync(created.id, {
+        rutVotante: '15.555.666-8',
+        rutEstudianteAsociado: '',
+        nombreCompleto: 'María Pérez',
+        estamento: 'PADRES_APODERADOS',
+        rbdEstablecimiento: '10202',
+        nombreEstablecimiento: 'Escuela Martín Prado',
+      }),
+    ).rejects.toThrow(/Regla Decreto 102/);
   });
 });
 

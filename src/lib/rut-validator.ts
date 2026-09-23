@@ -142,8 +142,8 @@ export function cleanAndValidateRUT(
     }
   }
 
-  // Caso 2: Si el valor ingresado es un cuerpo estrictamente numérico (7, 8 o 9 dígitos sin DV)
-  if (typeof rawRut === 'number' || /^\d{7,9}$/.test(cleanRut)) {
+  // Caso 2: Si el valor ingresado es un cuerpo estrictamente numérico (7, 8 o 9 dígitos sin DV explícito)
+  if (!isExplicitDvProvided && (typeof rawRut === 'number' || /^\d{7,9}$/.test(cleanRut))) {
     const computedDv = calculateModulo11DV(cleanRut);
     const fullRut = `${cleanRut}${computedDv}`;
 

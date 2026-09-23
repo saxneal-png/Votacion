@@ -484,6 +484,20 @@ export function AdminView({
   const [addVoterError, setAddVoterError] = useState<string | null>(null);
   const [addVoterSuccess, setAddVoterSuccess] = useState(false);
 
+  // Modal Edición Votante del Padrón
+  const [showEditVoterModal, setShowEditVoterModal] = useState(false);
+  const [editingVoter, setEditingVoter] = useState<PadronRecord | null>(null);
+  const [editVoterRut, setEditVoterRut] = useState('');
+  const [editVoterStudentRut, setEditVoterStudentRut] = useState('');
+  const [editVoterNombre, setEditVoterNombre] = useState('');
+  const [editVoterEstamento, setEditVoterEstamento] = useState<EstamentoDecreto102>('PADRES_APODERADOS');
+  const [editVoterRbd, setEditVoterRbd] = useState('');
+  const [editVoterNombreColegio, setEditVoterNombreColegio] = useState('');
+  const [editVoterHabilitado, setEditVoterHabilitado] = useState(true);
+  const [savingVoterEdit, setSavingVoterEdit] = useState(false);
+  const [editVoterError, setEditVoterError] = useState<string | null>(null);
+  const [editVoterSuccess, setEditVoterSuccess] = useState(false);
+
   // Candidatos State (Pestaña 2)
   const [candidatos, setCandidatos] = useState<Candidate[]>([]);
   const [loadingCandidatos, setLoadingCandidatos] = useState(false);
@@ -1046,6 +1060,65 @@ export function AdminView({
     }
   }
 
+  function handleOpenEditVoter(voter: PadronRecord) {
+    setEditingVoter(voter);
+    setEditVoterRut(voter.formattedRutVotante || voter.rutVotante);
+    setEditVoterStudentRut(voter.formattedRutEstudiante || voter.rutEstudianteAsociado || '');
+    setEditVoterNombre(voter.nombreCompleto);
+    setEditVoterEstamento(voter.estamento);
+    setEditVoterRbd(voter.rbdEstablecimiento);
+    setEditVoterNombreColegio(voter.nombreEstablecimiento);
+    setEditVoterHabilitado(voter.habilitado);
+    setEditVoterError(null);
+    setEditVoterSuccess(false);
+    setShowEditVoterModal(true);
+  }
+
+  async function handleSaveEditVoter(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editingVoter) return;
+
+    setSavingVoterEdit(true);
+    setEditVoterError(null);
+    setEditVoterSuccess(false);
+
+    try {
+      const res = await fetch('/api/admin/padron', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: editingVoter.id,
+          rutVotante: editVoterRut,
+          rutEstudianteAsociado: editVoterEstamento === 'PADRES_APODERADOS' ? editVoterStudentRut : null,
+          nombreCompleto: editVoterNombre,
+          estamento: editVoterEstamento,
+          rbdEstablecimiento: editVoterRbd,
+          nombreEstablecimiento: editVoterNombreColegio,
+          habilitado: editVoterHabilitado,
+        }),
+        credentials: 'same-origin',
+      });
+
+      const data = (await res.json()) as { message?: string; success?: boolean; record?: PadronRecord };
+      if (!res.ok || !data.success) {
+        setEditVoterError(data.message || 'Error al actualizar datos del votante.');
+      } else {
+        setEditVoterSuccess(true);
+        void fetchPadron();
+        onRefresh();
+        setTimeout(() => {
+          setShowEditVoterModal(false);
+          setEditingVoter(null);
+          setEditVoterSuccess(false);
+        }, 1200);
+      }
+    } catch (err) {
+      setEditVoterError(err instanceof Error ? err.message : 'Error al conectar con el servidor.');
+    } finally {
+      setSavingVoterEdit(false);
+    }
+  }
+
   // Candidatos CRUD Handlers
   function handleRbdChange(rbdVal: string) {
     setFormCandRbd(rbdVal);
@@ -1323,6 +1396,8 @@ az webapp config appsettings set --resource-group rg-slep-elecciones --name vota
 
   const rutValidation = cleanAndValidateRUT(newRutVotante);
   const studentRutValidation = newRutEstudiante ? cleanAndValidateRUT(newRutEstudiante) : null;
+  const editVoterRutValidation = cleanAndValidateRUT(editVoterRut);
+  const editVoterStudentValidation = editVoterStudentRut ? cleanAndValidateRUT(editVoterStudentRut) : null;
 
   return (
     <div className="min-h-screen bg-slate-100 text-slate-800 font-sans pb-16">
@@ -1760,7 +1835,16 @@ az webapp config appsettings set --resource-group rg-slep-elecciones --name vota
                                 </span>
                               )}
                             </td>
-                            <td className="p-3 text-right space-x-1">
+                            <td className="p-3 text-right space-x-1 whitespace-nowrap">
+                              <button
+                                type="button"
+                                onClick={() => handleOpenEditVoter(r)}
+                                className="px-2 py-1 rounded bg-blue-50 text-[#0b5294] hover:bg-blue-100 text-[11px] font-bold transition inline-flex items-center gap-1"
+                                title="Editar datos del votante (RUN, Nombre, Estudiante asociado, RBD)"
+                              >
+                                ✏️ Editar
+                              </button>
+
                               <button
                                 type="button"
                                 onClick={() => handleToggleHabilitado(r.id)}
@@ -1777,6 +1861,7 @@ az webapp config appsettings set --resource-group rg-slep-elecciones --name vota
                                 type="button"
                                 onClick={() => handleDeleteVoter(r.id)}
                                 className="px-2 py-1 rounded bg-red-50 text-red-600 hover:bg-red-100 text-[11px] font-bold transition"
+                                title="Eliminar votante del padrón"
                               >
                                 🗑️
                               </button>
@@ -3132,6 +3217,169 @@ CMD ["npm", "start"]`}
                   className="px-5 py-2 rounded-xl bg-[#0b5294] text-white font-bold hover:bg-[#0a4278] transition"
                 >
                   Guardar Votante
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      ) : null}
+
+      {/* Modal Edición de Votante del Padrón */}
+      {showEditVoterModal && editingVoter ? (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4 border border-slate-200 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div>
+                <h3 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
+                  <span>✏️ Editar Datos del Votante</span>
+                </h3>
+                <p className="text-[11px] text-slate-500 font-medium">
+                  Corrección de RUN, binomio apoderado-hijo y asignación de colegio
+                </p>
+              </div>
+              <button
+                type="button"
+                className="text-slate-400 hover:text-slate-600 font-bold"
+                onClick={() => {
+                  setShowEditVoterModal(false);
+                  setEditingVoter(null);
+                }}
+              >
+                ✕
+              </button>
+            </div>
+
+            {editingVoter.haVotado ? (
+              <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl text-xs text-blue-900 flex items-center gap-2 font-medium">
+                <span>ℹ️</span>
+                <span>Este votante ya figura con sufragio emitido en este proceso electoral.</span>
+              </div>
+            ) : null}
+
+            <form onSubmit={handleSaveEditVoter} className="space-y-3 text-xs">
+              <label className="grid gap-1 font-bold text-slate-700">
+                <span>Estamento (Decreto 102)</span>
+                <select
+                  className="h-10 px-3 rounded-xl border border-slate-300 font-semibold"
+                  value={editVoterEstamento}
+                  onChange={(e) => setEditVoterEstamento(e.target.value as EstamentoDecreto102)}
+                >
+                  <option value="ESTUDIANTES">Estudiantes</option>
+                  <option value="PADRES_APODERADOS">Padres y Apoderados</option>
+                  <option value="DOCENTES">Docentes</option>
+                  <option value="ASISTENTES">Asistentes de la Educación</option>
+                  <option value="DIRECTIVOS">Directivos</option>
+                </select>
+              </label>
+
+              <label className="grid gap-1 font-bold text-slate-700">
+                <span>RUN del Votante *</span>
+                <input
+                  type="text"
+                  className="h-10 px-3 rounded-xl border border-slate-300 font-mono text-sm"
+                  placeholder="12345678-9"
+                  value={editVoterRut}
+                  onChange={(e) => setEditVoterRut(e.target.value)}
+                  required
+                />
+                {editVoterRut ? (
+                  <span className={`text-[11px] font-normal ${editVoterRutValidation.valid ? 'text-emerald-600' : 'text-red-500'}`}>
+                    {editVoterRutValidation.valid ? `✓ Validado Módulo 11: ${editVoterRutValidation.formattedRut}` : `⚠️ ${editVoterRutValidation.errorReason}`}
+                  </span>
+                ) : null}
+              </label>
+
+              {editVoterEstamento === 'PADRES_APODERADOS' ? (
+                <label className="grid gap-1 font-bold text-amber-900 bg-amber-50 p-2.5 rounded-xl border border-amber-200">
+                  <div className="flex items-center justify-between">
+                    <span>👶 RUN del Estudiante Asociado *</span>
+                    <span className="text-[10px] font-semibold text-amber-700">Decreto N° 102</span>
+                  </div>
+                  <p className="text-[10px] text-amber-800 font-normal m-0 mb-1">
+                    Los apoderados se autentican ingresando su RUN y el RUN de su estudiante/pupilo matriculado.
+                  </p>
+                  <input
+                    type="text"
+                    className="h-10 px-3 rounded-xl border border-amber-300 font-mono text-sm bg-white"
+                    placeholder="23456789-2"
+                    value={editVoterStudentRut}
+                    onChange={(e) => setEditVoterStudentRut(e.target.value)}
+                    required
+                  />
+                  {editVoterStudentValidation ? (
+                    <span className={`text-[11px] font-normal ${editVoterStudentValidation.valid ? 'text-emerald-600' : 'text-red-500'}`}>
+                      {editVoterStudentValidation.valid ? `✓ Validado: ${editVoterStudentValidation.formattedRut}` : `⚠️ ${editVoterStudentValidation.errorReason}`}
+                    </span>
+                  ) : null}
+                </label>
+              ) : null}
+
+              <label className="grid gap-1 font-bold text-slate-700">
+                <span>Nombre Completo *</span>
+                <input
+                  type="text"
+                  className="h-10 px-3 rounded-xl border border-slate-300 font-sans"
+                  placeholder="Ej: Juan Pérez Morales"
+                  value={editVoterNombre}
+                  onChange={(e) => setEditVoterNombre(e.target.value)}
+                  required
+                />
+              </label>
+
+              <SchoolSelect
+                selectedRbd={editVoterRbd}
+                onSchoolSelect={({ rbd, nombre_oficial }) => {
+                  setEditVoterRbd(rbd);
+                  setEditVoterNombreColegio(nombre_oficial);
+                }}
+              />
+              {editVoterRbd ? (
+                <div className="p-2 bg-blue-50 text-blue-800 text-[11px] rounded-xl border border-blue-200 flex items-center justify-between font-medium">
+                  <span><strong>RBD Asignado:</strong> {editVoterRbd}</span>
+                  <span><strong>Colegio:</strong> {editVoterNombreColegio}</span>
+                </div>
+              ) : null}
+
+              <label className="flex items-center gap-2 p-2.5 rounded-xl border border-slate-200 bg-slate-50 cursor-pointer font-bold text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={editVoterHabilitado}
+                  onChange={(e) => setEditVoterHabilitado(e.target.checked)}
+                  className="w-4 h-4 text-[#0b5294] rounded border-slate-300 focus:ring-[#0b5294]"
+                />
+                <span>Habilitado para emitir sufragio</span>
+              </label>
+
+              {editVoterError ? (
+                <div className="p-2.5 rounded-xl bg-red-50 text-red-700 font-semibold border border-red-200">
+                  ⚠️ {editVoterError}
+                </div>
+              ) : null}
+
+              {editVoterSuccess ? (
+                <div className="p-2.5 rounded-xl bg-emerald-50 text-emerald-700 font-semibold border border-emerald-200">
+                  ✅ Datos del votante actualizados exitosamente.
+                </div>
+              ) : null}
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  className="px-4 py-2 rounded-xl border border-slate-200 font-bold text-slate-600 hover:bg-slate-50"
+                  onClick={() => {
+                    setShowEditVoterModal(false);
+                    setEditingVoter(null);
+                  }}
+                  disabled={savingVoterEdit}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingVoterEdit}
+                  className="px-5 py-2 rounded-xl bg-blue-600 text-white font-bold hover:bg-blue-700 transition disabled:opacity-50 flex items-center gap-1.5 shadow-md"
+                >
+                  {savingVoterEdit ? 'Guardando...' : '💾 Actualizar Votante'}
                 </button>
               </div>
             </form>

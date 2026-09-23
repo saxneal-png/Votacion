@@ -308,6 +308,158 @@ export function addSingleVoter(data: {
 }
 
 /**
+ * Actualiza un registro del padrón con validación estricta de RUN y binomio estudiante
+ */
+export function updateVoterRecord(id: string, data: {
+  rutVotante: string;
+  rutEstudianteAsociado?: string | null;
+  nombreCompleto: string;
+  estamento: EstamentoDecreto102;
+  rbdEstablecimiento: string;
+  nombreEstablecimiento: string;
+  habilitado?: boolean;
+}): PadronRecord {
+  const cleanId = (id || '').trim();
+  const index = padronStore.findIndex(
+    (r) => r.id === cleanId || r.rutVotante === cleanId || r.formattedRutVotante === cleanId,
+  );
+
+  const rutValidation = cleanAndValidateRUT(data.rutVotante);
+  if (!rutValidation.valid) {
+    throw new Error(`RUN de votante inválido: ${rutValidation.errorReason}`);
+  }
+
+  let studentRutClean: string | null = null;
+  let studentRutFormatted: string | null = null;
+
+  if (data.estamento === 'PADRES_APODERADOS') {
+    if (!data.rutEstudianteAsociado) {
+      throw new Error(
+        'Regla Decreto 102: Para el estamento Padres y Apoderados es obligatorio proporcionar el RUN del Estudiante asociado (hijo/pupilo matriculado).',
+      );
+    }
+    const studentValidation = cleanAndValidateRUT(data.rutEstudianteAsociado);
+    if (!studentValidation.valid) {
+      throw new Error(`RUN del estudiante asociado inválido: ${studentValidation.errorReason}`);
+    }
+    studentRutClean = studentValidation.cleanRut;
+    studentRutFormatted = studentValidation.formattedRut;
+  }
+
+  // Comprobar duplicidad con otros registros
+  const duplicate = padronStore.find((r, i) => {
+    if (i === index) return false;
+    if (r.estamento !== data.estamento) return false;
+    if (data.estamento === 'PADRES_APODERADOS') {
+      return r.rutVotante === rutValidation.cleanRut && r.rutEstudianteAsociado === studentRutClean;
+    }
+    return r.rutVotante === rutValidation.cleanRut;
+  });
+
+  if (duplicate) {
+    throw new Error('Ya existe otro registro en el padrón con el mismo RUN y estamento.');
+  }
+
+  if (index === -1) {
+    const newLocal: PadronRecord = {
+      id: cleanId || `padron-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      rutVotante: rutValidation.cleanRut,
+      formattedRutVotante: rutValidation.formattedRut,
+      rutEstudianteAsociado: studentRutClean,
+      formattedRutEstudiante: studentRutFormatted,
+      nombreCompleto: data.nombreCompleto.trim(),
+      estamento: data.estamento,
+      rbdEstablecimiento: data.rbdEstablecimiento.trim(),
+      nombreEstablecimiento: data.nombreEstablecimiento.trim(),
+      habilitado: data.habilitado !== undefined ? Boolean(data.habilitado) : true,
+      haVotado: false,
+      fechaVoto: null,
+      createdAt: new Date().toISOString(),
+    };
+    padronStore.unshift(newLocal);
+    return newLocal;
+  }
+
+  const existing = padronStore[index];
+  const updatedRecord: PadronRecord = {
+    ...existing,
+    rutVotante: rutValidation.cleanRut,
+    formattedRutVotante: rutValidation.formattedRut,
+    rutEstudianteAsociado: studentRutClean,
+    formattedRutEstudiante: studentRutFormatted,
+    nombreCompleto: data.nombreCompleto.trim(),
+    estamento: data.estamento,
+    rbdEstablecimiento: data.rbdEstablecimiento.trim(),
+    nombreEstablecimiento: data.nombreEstablecimiento.trim(),
+    habilitado: data.habilitado !== undefined ? Boolean(data.habilitado) : existing.habilitado,
+  };
+
+  padronStore[index] = updatedRecord;
+  return updatedRecord;
+}
+
+/**
+ * Actualiza un registro del padrón en Supabase y en memoria
+ */
+export async function updateVoterRecordAsync(id: string, data: {
+  rutVotante: string;
+  rutEstudianteAsociado?: string | null;
+  nombreCompleto: string;
+  estamento: EstamentoDecreto102;
+  rbdEstablecimiento: string;
+  nombreEstablecimiento: string;
+  habilitado?: boolean;
+}): Promise<PadronRecord> {
+  const local = updateVoterRecord(id, data);
+  const cleanId = (id || '').trim();
+
+  if (supabaseAdmin) {
+    try {
+      const updatePayload: Record<string, unknown> = {
+        rut_votante: local.rutVotante,
+        formatted_rut_votante: local.formattedRutVotante,
+        rut_estudiante_asociado: local.rutEstudianteAsociado,
+        formatted_rut_estudiante: local.formattedRutEstudiante,
+        nombre_completo: local.nombreCompleto,
+        estamento: local.estamento,
+        rbd_establecimiento: local.rbdEstablecimiento,
+        nombre_establecimiento: local.nombreEstablecimiento,
+        habilitado: local.habilitado,
+      };
+
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cleanId);
+
+      let updateError = null;
+      if (isUuid) {
+        const { error } = await supabaseAdmin
+          .from('bd_padron')
+          .update(updatePayload)
+          .eq('id', cleanId);
+        updateError = error;
+      } else {
+        const { error } = await supabaseAdmin
+          .from('bd_padron')
+          .update(updatePayload)
+          .or(`rut_votante.eq.${cleanId},formatted_rut_votante.eq.${cleanId}`);
+        updateError = error;
+      }
+
+      if (updateError) {
+        console.error('[SUPABASE] Error actualizando votante en bd_padron:', updateError.message);
+        throw new Error(`Error al actualizar en base de datos: ${updateError.message}`);
+      }
+
+      console.log('[SUPABASE] Votante actualizado correctamente en bd_padron:', local.rutVotante);
+    } catch (err) {
+      console.error('[SUPABASE] Excepción en updateVoterRecordAsync:', err);
+      throw err;
+    }
+  }
+
+  return local;
+}
+
+/**
  * Habilita o inhabilita un votante en el padrón
  */
 export function toggleVoterHabilitado(id: string): PadronRecord {
