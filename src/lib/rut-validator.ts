@@ -80,6 +80,11 @@ export function validateRutModulo11(cleanRut: string): boolean {
     return false;
   }
 
+  // Identificador Provisorio Escolar (IPE / IPA) asignado por MINEDUC (cuerpo >= 100.000.000)
+  if (parseInt(numberPart, 10) >= 100000000) {
+    return true;
+  }
+
   const expectedDv = calculateModulo11DV(numberPart);
   return dvInput === expectedDv;
 }
@@ -104,9 +109,10 @@ export function formatRut(cleanRut: string): string {
 
 /**
  * Sanitiza y valida un RUN / IPE utilizando las reglas chilenas Módulo 11:
- * 1. Si viene con DV (8 a 10 caracteres), lo valida estrictamente.
- * 2. Si viene únicamente el cuerpo numérico (7 a 9 dígitos, incluyendo rango 100.000.000+), calcula el DV automáticamente.
- * 3. Proporciona mensajes de alerta detallados en caso de invalidez.
+ * 1. Si pertenece al rango IPE/IPA (cuerpo >= 100.000.000), es aceptado como identificador provisorio MINEDUC.
+ * 2. Si viene con DV (8 a 10 caracteres), lo valida estrictamente por Módulo 11.
+ * 3. Si viene únicamente el cuerpo numérico (7 a 9 dígitos), calcula el DV automáticamente.
+ * 4. Proporciona mensajes de alerta detallados en caso de invalidez.
  */
 export function cleanAndValidateRUT(
   rawRut: string | number,
@@ -123,12 +129,29 @@ export function cleanAndValidateRUT(
     };
   }
 
-  // Detectar si pertenece al rango IPE / Identificador Provisorio (100.000.000+)
-  const bodyOnly = cleanRut.replace(/[^0-9]/g, '');
-  const isIpeRange = bodyOnly.startsWith('100') || (bodyOnly.length >= 9 && parseInt(bodyOnly.slice(0, 9), 10) >= 100000000);
-
-  // Si venía un DV explícito en columna separada o en el texto (ej: 12.345.678-5, 100.123.456-7)
   const isExplicitDvProvided = Boolean(rawDv) || (typeof rawRut === 'string' && rawRut.includes('-'));
+
+  // Caso Identificador Provisorio MINEDUC (IPE / IPA con cuerpo >= 100.000.000)
+  if (cleanRut.length >= 9) {
+    const cuerpoWithDv = cleanRut.slice(0, -1);
+    if (/^\d+$/.test(cuerpoWithDv) && parseInt(cuerpoWithDv, 10) >= 100000000) {
+      return {
+        valid: true,
+        cleanRut,
+        formattedRut: formatRut(cleanRut),
+      };
+    }
+    if (/^\d+$/.test(cleanRut) && parseInt(cleanRut, 10) >= 100000000 && !isExplicitDvProvided) {
+      const computedDv = calculateModulo11DV(cleanRut);
+      const fullRut = `${cleanRut}${computedDv}`;
+      return {
+        valid: true,
+        cleanRut: fullRut,
+        formattedRut: formatRut(fullRut),
+        autoCorrected: true,
+      };
+    }
+  }
 
   // Caso 1: Si se proporcionó un DV explícito o tiene 8 a 10 caracteres con DV al final
   if (isExplicitDvProvided || (cleanRut.length >= 8 && cleanRut.length <= 10 && /[0-9K]/.test(cleanRut.slice(-1)))) {
@@ -142,8 +165,8 @@ export function cleanAndValidateRUT(
     }
   }
 
-  // Caso 2: Si el valor ingresado es un cuerpo estrictamente numérico (7, 8 o 9 dígitos sin DV explícito)
-  if (!isExplicitDvProvided && (typeof rawRut === 'number' || /^\d{7,9}$/.test(cleanRut))) {
+  // Caso 2: Si el valor ingresado es un cuerpo estrictamente numérico (7 u 8 dígitos sin DV explícito)
+  if (!isExplicitDvProvided && (typeof rawRut === 'number' || /^\d{7,8}$/.test(cleanRut))) {
     const computedDv = calculateModulo11DV(cleanRut);
     const fullRut = `${cleanRut}${computedDv}`;
 
@@ -173,15 +196,6 @@ export function cleanAndValidateRUT(
       cleanRut,
       formattedRut: formatRut(cleanRut),
       errorReason: `RUN "${rawRut}" excede la longitud máxima permitida (máximo 9 dígitos más dígito verificador).`,
-    };
-  }
-
-  if (isIpeRange) {
-    return {
-      valid: false,
-      cleanRut,
-      formattedRut: formatRut(cleanRut),
-      errorReason: `RUN/IPE de extranjero o provisorio "${rawRut}" (rango 100.000.000+) posee un dígito verificador no coincidente con el cálculo Módulo 11.`,
     };
   }
 

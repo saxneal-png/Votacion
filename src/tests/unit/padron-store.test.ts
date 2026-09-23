@@ -40,11 +40,16 @@ describe('rut-validator', () => {
     expect(res3.autoCorrected).toBe(true);
   });
 
-  it('genera mensajes de alerta claros y descriptivos para RUNs inválidos o IPE erróneos', () => {
-    const resInvalidIpe = cleanAndValidateRUT('100.000.000-9');
-    expect(resInvalidIpe.valid).toBe(false);
-    expect(resInvalidIpe.errorReason).toContain('100.000.000');
-    expect(resInvalidIpe.errorReason).toContain('extranjero o provisorio');
+  it('genera mensajes de alerta claros y descriptivos para RUNs inválidos o IPE provisorios', () => {
+    // IPE con cualquier dígito es válido por ser provisorio MINEDUC (>= 100.000.000)
+    const resIpeProvisorio = cleanAndValidateRUT('100.000.000-9');
+    expect(resIpeProvisorio.valid).toBe(true);
+    expect(resIpeProvisorio.cleanRut).toBe('1000000009');
+
+    // RUN estándar chileno con DV erróneo
+    const resInvalidStandard = cleanAndValidateRUT('19.885.568-0');
+    expect(resInvalidStandard.valid).toBe(false);
+    expect(resInvalidStandard.errorReason).toContain('Módulo 11');
 
     const resIncomplete = cleanAndValidateRUT('12345-6');
     expect(resIncomplete.valid).toBe(false);

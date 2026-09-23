@@ -4,11 +4,16 @@ import * as path from 'path';
 import { parsePadronWorkbook } from '@/lib/padron-parser';
 
 describe('Compatibilidad de Importación entre "Creación de Padrón" y "Votacion"', () => {
-  const padronUnificadoPath = 'C:/Users/DionicioFelipeFlores/Downloads/Creación de Padrón/Padron_Electoral_Unificado_FINAL.xlsx';
+  const candidatesPaths = [
+    'C:/Users/DionicioFelipeFlores/Downloads/Padron_Electoral_Unificado_SLEP.xlsx',
+    'C:/Users/DionicioFelipeFlores/Downloads/Creación de Padrón/Padron_Electoral_Unificado_FINAL.xlsx',
+    'C:/Users/DionicioFelipeFlores/Downloads/Padron_Electoral_Unificado_FINAL.xlsx'
+  ];
 
-  it('analiza y parsea Padron_Electoral_Unificado_FINAL.xlsx', () => {
-    if (!fs.existsSync(padronUnificadoPath)) {
-      console.log('Archivo no encontrado:', padronUnificadoPath);
+  it('analiza y parsea Padron_Electoral_Unificado_SLEP.xlsx / FINAL.xlsx', () => {
+    const padronUnificadoPath = candidatesPaths.find(p => fs.existsSync(p));
+    if (!padronUnificadoPath) {
+      console.log('Ningún archivo encontrado en las rutas candidatas');
       return;
     }
 
