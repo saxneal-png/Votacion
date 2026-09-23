@@ -61,26 +61,26 @@ export function parsePadronWorkbook(
       defaultEstamento = 'DIRECTIVOS';
     }
 
-    // Detección de Fila de Encabezados
+    // Detección de Fila de Encabezados (Soporta múltiples índices para encabezados duplicados)
     let headerRowIndex = -1;
-    let colRutFamiliar = -1;
-    let colNombreFamiliar = -1;
-    let colApPaternoFamiliar = -1;
-    let colApMaternoFamiliar = -1;
-    let colNombreEstablecimiento = -1;
-    let colRbd = -1;
+    const colsRutFamiliar: number[] = [];
+    const colsNombreFamiliar: number[] = [];
+    const colsApPaternoFamiliar: number[] = [];
+    const colsApMaternoFamiliar: number[] = [];
+    const colsNombreEstablecimiento: number[] = [];
+    const colsRbd: number[] = [];
 
-    let colRutAlumno = -1;
-    let colNombreAlumno = -1;
-    let colApPaternoAlumno = -1;
-    let colApMaternoAlumno = -1;
+    const colsRutAlumno: number[] = [];
+    const colsNombreAlumno: number[] = [];
+    const colsApPaternoAlumno: number[] = [];
+    const colsApMaternoAlumno: number[] = [];
 
-    let colRutGeneral = -1;
-    let colNombresGeneral = -1;
-    let colApellPaternoGeneral = -1;
-    let colApellMaternoGeneral = -1;
-    let colNombreCompletoGeneral = -1;
-    let colEstamentoGeneral = -1;
+    const colsRutGeneral: number[] = [];
+    const colsNombresGeneral: number[] = [];
+    const colsApellPaternoGeneral: number[] = [];
+    const colsApellMaternoGeneral: number[] = [];
+    const colsNombreCompletoGeneral: number[] = [];
+    const colsEstamentoGeneral: number[] = [];
 
     for (let r = 0; r < Math.min(25, matrix.length); r++) {
       const row = matrix[r];
@@ -90,44 +90,44 @@ export function parsePadronWorkbook(
         const valStr = String(cellVal ?? '').trim().toLowerCase().replace(/[^a-z0-9]/g, '');
 
         if (valStr === 'rutfamiliar' || valStr === 'runfamiliar' || valStr === 'rutapoderado' || valStr === 'runapoderado') {
-          colRutFamiliar = c;
+          colsRutFamiliar.push(c);
         } else if (valStr === 'nombrefamiliar' || valStr === 'nombreapoderado') {
-          colNombreFamiliar = c;
+          colsNombreFamiliar.push(c);
         } else if (valStr === 'appaternofamiliar' || valStr === 'appaternoapoderado') {
-          colApPaternoFamiliar = c;
+          colsApPaternoFamiliar.push(c);
         } else if (valStr === 'apmaternofamiliar' || valStr === 'apmaternoapoderado') {
-          colApMaternoFamiliar = c;
+          colsApMaternoFamiliar.push(c);
         } else if (valStr === 'nombreestablecimiento' || valStr === 'escuelaliceo' || valStr === 'establecimiento' || valStr === 'nombrecolegio') {
-          colNombreEstablecimiento = c;
+          colsNombreEstablecimiento.push(c);
         } else if (valStr === 'rbd' || valStr === 'codrbd') {
-          colRbd = c;
+          colsRbd.push(c);
         } else if (valStr === 'rutalumno' || valStr === 'runalumno' || valStr === 'rutestudiante' || valStr === 'runestudiante') {
-          colRutAlumno = c;
+          colsRutAlumno.push(c);
         } else if (valStr === 'nombrealumno' || valStr === 'nombreestudiante') {
-          colNombreAlumno = c;
+          colsNombreAlumno.push(c);
         } else if (valStr === 'appaternoalumno' || valStr === 'appaternoestudiante') {
-          colApPaternoAlumno = c;
+          colsApPaternoAlumno.push(c);
         } else if (valStr === 'apmaternoalumno' || valStr === 'apmaternoestudiante') {
-          colApMaternoAlumno = c;
+          colsApMaternoAlumno.push(c);
         } else if (valStr === 'run' || valStr === 'rut' || valStr === 'cedula' || valStr === 'identificacion') {
-          colRutGeneral = c;
+          colsRutGeneral.push(c);
         } else if (valStr === 'nombres' || valStr === 'nombre') {
-          colNombresGeneral = c;
+          colsNombresGeneral.push(c);
         } else if (valStr === 'apellidopaterno' || valStr === 'paterno') {
-          colApellPaternoGeneral = c;
+          colsApellPaternoGeneral.push(c);
         } else if (valStr === 'apellidomaterno' || valStr === 'materno') {
-          colApellMaternoGeneral = c;
+          colsApellMaternoGeneral.push(c);
         } else if (valStr === 'nombrecompleto' || valStr === 'votante') {
-          colNombreCompletoGeneral = c;
+          colsNombreCompletoGeneral.push(c);
         } else if (valStr === 'estamento' || valStr === 'cargo' || valStr === 'tipo') {
-          colEstamentoGeneral = c;
+          colsEstamentoGeneral.push(c);
         }
       });
 
       if (
-        colRutFamiliar !== -1 ||
-        colRutAlumno !== -1 ||
-        (colRutGeneral !== -1 && (colNombreCompletoGeneral !== -1 || colNombresGeneral !== -1 || colEstamentoGeneral !== -1))
+        colsRutFamiliar.length > 0 ||
+        colsRutAlumno.length > 0 ||
+        (colsRutGeneral.length > 0 && (colsNombreCompletoGeneral.length > 0 || colsNombresGeneral.length > 0 || colsEstamentoGeneral.length > 0))
       ) {
         headerRowIndex = r;
         break;
@@ -143,6 +143,17 @@ export function parsePadronWorkbook(
 
       const filaNum = r + 1;
 
+      // Helper para extraer el primer valor no vacío de entre las columnas candidatas
+      const getFirstNonEmpty = (colIndices: number[]): string => {
+        for (const c of colIndices) {
+          if (row[c] !== undefined && row[c] !== null) {
+            const val = String(row[c]).trim();
+            if (val !== '') return val;
+          }
+        }
+        return '';
+      };
+
       // Extracción posicional estándar MINEDUC (Columnas A-S)
       const posNombreFamiliar = String(row[0] ?? '').trim();
       const posApPaternoFamiliar = String(row[1] ?? '').trim();
@@ -157,12 +168,12 @@ export function parsePadronWorkbook(
       const posApPaternoAlumno = String(row[17] ?? '').trim();
       const posApMaternoAlumno = String(row[18] ?? '').trim();
 
-      const hdrRutFamiliar = colRutFamiliar !== -1 ? String(row[colRutFamiliar] ?? '').trim() : '';
-      const hdrRutAlumno = colRutAlumno !== -1 ? String(row[colRutAlumno] ?? '').trim() : '';
-      const hdrRutGeneral = colRutGeneral !== -1 ? String(row[colRutGeneral] ?? '').trim() : '';
+      const hdrRutFamiliar = getFirstNonEmpty(colsRutFamiliar);
+      const hdrRutAlumno = getFirstNonEmpty(colsRutAlumno);
+      const hdrRutGeneral = getFirstNonEmpty(colsRutGeneral);
 
-      const hdrNombreEstablecimiento = colNombreEstablecimiento !== -1 ? String(row[colNombreEstablecimiento] ?? '').trim() : '';
-      const hdrRbd = colRbd !== -1 ? String(row[colRbd] ?? '').trim() : '';
+      const hdrNombreEstablecimiento = getFirstNonEmpty(colsNombreEstablecimiento);
+      const hdrRbd = getFirstNonEmpty(colsRbd);
 
       // ASIGNACIÓN ESTRICTA Y EXPLICITA DE HOJA
       let isApoderadoSheet = false;
@@ -172,9 +183,9 @@ export function parsePadronWorkbook(
         isApoderadoSheet = true;
       } else if (defaultEstamento === 'ESTUDIANTES') {
         isEstudianteSheet = true;
-      } else if (colRutFamiliar !== -1) {
+      } else if (colsRutFamiliar.length > 0) {
         isApoderadoSheet = true;
-      } else if (colRutAlumno !== -1) {
+      } else if (colsRutAlumno.length > 0) {
         isEstudianteSheet = true;
       }
 
@@ -190,10 +201,11 @@ export function parsePadronWorkbook(
         rawRutVotante = hdrRutFamiliar || posRutFamiliar;
         rawRutEstudiante = hdrRutAlumno || posRutAlumno;
 
-        if (colNombreFamiliar !== -1) {
-          const nom = String(row[colNombreFamiliar] ?? '').trim();
-          const pat = colApPaternoFamiliar !== -1 ? String(row[colApPaternoFamiliar] ?? '').trim() : '';
-          const mat = colApMaternoFamiliar !== -1 ? String(row[colApMaternoFamiliar] ?? '').trim() : '';
+        const nom = getFirstNonEmpty(colsNombreFamiliar);
+        const pat = getFirstNonEmpty(colsApPaternoFamiliar);
+        const mat = getFirstNonEmpty(colsApMaternoFamiliar);
+
+        if (nom || pat || mat) {
           rawNombreCompleto = [nom, pat, mat].filter(Boolean).join(' ').trim();
         } else {
           rawNombreCompleto = [posNombreFamiliar, posApPaternoFamiliar, posApMaternoFamiliar].filter(Boolean).join(' ').trim();
@@ -226,16 +238,18 @@ export function parsePadronWorkbook(
           String(row[0] ?? '').trim();
         rawRutEstudiante = null;
 
-        if (colNombreAlumno !== -1) {
-          const nom = String(row[colNombreAlumno] ?? '').trim();
-          const pat = colApPaternoAlumno !== -1 ? String(row[colApPaternoAlumno] ?? '').trim() : '';
-          const mat = colApMaternoAlumno !== -1 ? String(row[colApMaternoAlumno] ?? '').trim() : '';
-          rawNombreCompleto = [nom, pat, mat].filter(Boolean).join(' ').trim();
-        } else if (colNombresGeneral !== -1) {
-          const nom = String(row[colNombresGeneral] ?? '').trim();
-          const pat = colApellPaternoGeneral !== -1 ? String(row[colApellPaternoGeneral] ?? '').trim() : '';
-          const mat = colApellMaternoGeneral !== -1 ? String(row[colApellMaternoGeneral] ?? '').trim() : '';
-          rawNombreCompleto = [nom, pat, mat].filter(Boolean).join(' ').trim();
+        const nomEst = getFirstNonEmpty(colsNombreAlumno);
+        const patEst = getFirstNonEmpty(colsApPaternoAlumno);
+        const matEst = getFirstNonEmpty(colsApMaternoAlumno);
+
+        const nomGen = getFirstNonEmpty(colsNombresGeneral);
+        const patGen = getFirstNonEmpty(colsApellPaternoGeneral);
+        const matGen = getFirstNonEmpty(colsApellMaternoGeneral);
+
+        if (nomEst || patEst || matEst) {
+          rawNombreCompleto = [nomEst, patEst, matEst].filter(Boolean).join(' ').trim();
+        } else if (nomGen || patGen || matGen) {
+          rawNombreCompleto = [nomGen, patGen, matGen].filter(Boolean).join(' ').trim();
         } else if (posNombreAlumno || posApPaternoAlumno || posApMaternoAlumno) {
           rawNombreCompleto = [posNombreAlumno, posApPaternoAlumno, posApMaternoAlumno].filter(Boolean).join(' ').trim();
         } else if (posNombreFamiliar || posApPaternoFamiliar || posApMaternoFamiliar) {
@@ -254,17 +268,19 @@ export function parsePadronWorkbook(
         }
 
       } else {
-        // Hoja General de Funcionarios
-        rawRutVotante = hdrRutGeneral || String(row[0] ?? '').trim();
-        rawEstamento = colEstamentoGeneral !== -1 ? String(row[colEstamentoGeneral] ?? '').trim() : String(row[4] ?? '').trim();
+        // Hoja General de Funcionarios (Docentes, Asistentes, Directivos)
+        rawRutVotante = hdrRutGeneral || hdrRutFamiliar || String(row[0] ?? '').trim();
+        rawEstamento = getFirstNonEmpty(colsEstamentoGeneral) || defaultEstamento || String(row[4] ?? '').trim();
 
-        if (colNombreCompletoGeneral !== -1 && String(row[colNombreCompletoGeneral] ?? '').trim()) {
-          rawNombreCompleto = String(row[colNombreCompletoGeneral] ?? '').trim();
-        } else if (colNombresGeneral !== -1) {
-          const nom = String(row[colNombresGeneral] ?? '').trim();
-          const pat = colApellPaternoGeneral !== -1 ? String(row[colApellPaternoGeneral] ?? '').trim() : '';
-          const mat = colApellMaternoGeneral !== -1 ? String(row[colApellMaternoGeneral] ?? '').trim() : '';
-          rawNombreCompleto = [nom, pat, mat].filter(Boolean).join(' ').trim();
+        const nomGen = getFirstNonEmpty(colsNombresGeneral);
+        const patGen = getFirstNonEmpty(colsApellPaternoGeneral);
+        const matGen = getFirstNonEmpty(colsApellMaternoGeneral);
+        const nomCompGen = getFirstNonEmpty(colsNombreCompletoGeneral);
+
+        if (nomCompGen) {
+          rawNombreCompleto = nomCompGen;
+        } else if (nomGen || patGen || matGen) {
+          rawNombreCompleto = [nomGen, patGen, matGen].filter(Boolean).join(' ').trim();
         } else {
           rawNombreCompleto = [String(row[3] ?? ''), String(row[1] ?? ''), String(row[2] ?? '')].filter(Boolean).join(' ').trim();
         }
