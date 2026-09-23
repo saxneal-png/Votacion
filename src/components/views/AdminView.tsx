@@ -4,6 +4,7 @@ import React, { useEffect, useState } from 'react';
 import type { AdminAuditEntry, AdminMetrics, Candidate, Estamento } from '@/types';
 import type { EstamentoDecreto102, ExcelProcessingResult, PadronRecord, QuorumEstamentoStatus } from '@/lib/padron-store';
 import { parsePadronWorkbook, type ParsedPadronItem } from '@/lib/padron-parser';
+import { parseCandidatesWorkbook, type ParseCandidateResult } from '@/lib/candidates-excel';
 import type { ConnectionTestResult } from '@/lib/azure-m365-service';
 import { cleanAndValidateRUT } from '@/lib/rut-validator';
 import type { VotingRecordEntry } from '@/lib/voting-record-store';
@@ -511,6 +512,15 @@ export function AdminView({
   const [showDeleteCandModal, setShowDeleteCandModal] = useState(false);
   const [candidateToDelete, setCandidateToDelete] = useState<Candidate | null>(null);
   const [deletingCandidate, setDeletingCandidate] = useState(false);
+
+  // Modal Importación Masiva de Candidatos State
+  const [showImportCandModal, setShowImportCandModal] = useState(false);
+  const [importCandFile, setImportCandFile] = useState<File | null>(null);
+  const [importingCandidates, setImportingCandidates] = useState(false);
+  const [importReplaceMode, setImportReplaceMode] = useState(false);
+  const [importCandPreview, setImportCandPreview] = useState<ParseCandidateResult | null>(null);
+  const [importCandError, setImportCandError] = useState<string | null>(null);
+  const [importCandSuccessMessage, setImportCandSuccessMessage] = useState<string | null>(null);
 
   // Azure M365 State (Pestaña 5)
   const [azureTenantId, setAzureTenantId] = useState('');
@@ -1198,6 +1208,85 @@ export function AdminView({
       console.error('Error al eliminar candidato:', err);
     } finally {
       setDeletingCandidate(false);
+    }
+  }
+
+  function handleExportCandidates(format: 'xlsx' | 'csv' = 'xlsx') {
+    const params = new URLSearchParams();
+    params.set('format', format);
+    if (candidatoSearch) params.set('search', candidatoSearch);
+    if (candidatoEstamentoFilter !== 'ALL') params.set('estamento', candidatoEstamentoFilter);
+    window.open(`/api/admin/candidatos/export?${params.toString()}`, '_blank');
+  }
+
+  function handleDownloadCandTemplate() {
+    window.open('/api/admin/candidatos/export?template=true', '_blank');
+  }
+
+  async function handleSelectImportCandFile(file: File | null) {
+    setImportCandFile(file);
+    setImportCandError(null);
+    setImportCandSuccessMessage(null);
+    setImportCandPreview(null);
+
+    if (!file) return;
+
+    try {
+      const buffer = await file.arrayBuffer();
+      const parsed = parseCandidatesWorkbook(buffer);
+      setImportCandPreview(parsed);
+      if (parsed.records.length === 0 && parsed.erroresDetalle.length > 0) {
+        setImportCandError(`No se pudieron extraer candidatos válidos. Se encontraron ${parsed.erroresDetalle.length} errores.`);
+      }
+    } catch (err) {
+      setImportCandError(err instanceof Error ? err.message : 'Error al leer el archivo seleccionado.');
+    }
+  }
+
+  async function handleConfirmImportCandidates() {
+    if (!importCandPreview || importCandPreview.records.length === 0) {
+      setImportCandError('No hay registros válidos para importar.');
+      return;
+    }
+
+    setImportingCandidates(true);
+    setImportCandError(null);
+    setImportCandSuccessMessage(null);
+
+    try {
+      const res = await fetch('/api/admin/candidatos/upload', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          records: importCandPreview.records,
+          replaceMode: importReplaceMode,
+        }),
+        credentials: 'same-origin',
+      });
+
+      const data = (await res.json()) as {
+        success: boolean;
+        registrosInsertados?: number;
+        message?: string;
+      };
+
+      if (res.ok && data.success) {
+        setImportCandSuccessMessage(`¡Importación exitosa! Se cargaron ${data.registrosInsertados || importCandPreview.records.length} candidaturas.`);
+        void fetchCandidatos();
+        onRefresh();
+        setTimeout(() => {
+          setShowImportCandModal(false);
+          setImportCandFile(null);
+          setImportCandPreview(null);
+          setImportCandSuccessMessage(null);
+        }, 1500);
+      } else {
+        setImportCandError(data.message || 'Error al guardar las candidaturas importadas.');
+      }
+    } catch (err) {
+      setImportCandError(err instanceof Error ? err.message : 'Error de red durante la importación.');
+    } finally {
+      setImportingCandidates(false);
     }
   }
 
@@ -2129,17 +2218,52 @@ az webapp config appsettings set --resource-group rg-slep-elecciones --name vota
                   <span>👤 Módulo de Registro y Gestión de Candidatos</span>
                 </h2>
                 <p className="text-xs text-slate-500">
-                  Inscripción, edición y administración de candidaturas para los 5 estamentos del Consejo Local.
+                  Inscripción, exportación, importación masiva y administración de candidaturas para los 5 estamentos del Consejo Local.
                 </p>
               </div>
 
-              <button
-                type="button"
-                onClick={handleOpenCreateCandidate}
-                className="h-10 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition flex items-center gap-1.5 shadow-md"
-              >
-                <span>➕</span> Inscribir Candidato
-              </button>
+              <div className="flex items-center gap-2 flex-wrap">
+                <button
+                  type="button"
+                  onClick={() => handleExportCandidates('xlsx')}
+                  className="h-10 px-4 rounded-xl bg-purple-700 hover:bg-purple-800 text-white text-xs font-bold transition flex items-center gap-1.5 shadow-md"
+                  title="Exportar planilla Excel (.xlsx) con todos los campos (número, RBD, escuela, propuesta, biografía, foto)"
+                >
+                  <span>📥</span> Exportar Excel
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleExportCandidates('csv')}
+                  className="h-10 px-3 rounded-xl bg-purple-50 hover:bg-purple-100 text-purple-800 border border-purple-200 text-xs font-bold transition flex items-center gap-1.5"
+                  title="Exportar archivo CSV con codificación UTF-8"
+                >
+                  <span>📄</span> CSV
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowImportCandModal(true);
+                    setImportCandFile(null);
+                    setImportCandPreview(null);
+                    setImportCandError(null);
+                    setImportCandSuccessMessage(null);
+                  }}
+                  className="h-10 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition flex items-center gap-1.5 shadow-md"
+                  title="Importar candidatos desde planilla Excel (.xlsx / .csv) respetando todos sus datos"
+                >
+                  <span>📤</span> Importar Candidatos
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleOpenCreateCandidate}
+                  className="h-10 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition flex items-center gap-1.5 shadow-md"
+                >
+                  <span>➕</span> Inscribir Candidato
+                </button>
+              </div>
             </div>
 
             <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-wrap items-center justify-between gap-3">
@@ -2148,7 +2272,7 @@ az webapp config appsettings set --resource-group rg-slep-elecciones --name vota
                   <input
                     type="text"
                     className="w-full h-10 pl-9 pr-3 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:outline-none focus:border-[#0b5294] transition"
-                    placeholder="Buscar por nombre, escuela o propuesta..."
+                    placeholder="Buscar por nombre, escuela, RBD o propuesta..."
                     value={candidatoSearch}
                     onChange={(e) => setCandidatoSearch(e.target.value)}
                   />
@@ -2214,7 +2338,7 @@ az webapp config appsettings set --resource-group rg-slep-elecciones --name vota
                               {c.nombreCompleto || c.name}
                             </h3>
                             <p className="text-xs text-slate-600 font-semibold truncate">
-                              🏫 {c.escuelaEstablecimiento || c.role}
+                              🏫 {c.escuelaEstablecimiento || c.role} {c.rbd ? <span className="text-[10px] text-slate-500 font-mono font-normal">(RBD {c.rbd})</span> : null}
                             </p>
                             <div className="flex flex-wrap items-center gap-1.5 mt-1">
                               <span
@@ -3194,6 +3318,215 @@ CMD ["npm", "start"]`}
                 className="px-5 py-2 rounded-xl bg-red-600 text-white font-bold text-xs hover:bg-red-700 transition disabled:opacity-50"
               >
                 {deletingCandidate ? 'Eliminando...' : 'Sí, Eliminar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {/* Modal Importación Masiva de Candidatos */}
+      {showImportCandModal ? (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-2xl w-full p-6 shadow-2xl space-y-4 border border-slate-200 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center text-lg font-bold">
+                  📤
+                </div>
+                <div>
+                  <h3 className="text-base font-extrabold text-slate-900">
+                    Importar Candidatos (Excel / CSV)
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    Carga masiva respetando Número de papeleta, RBD, Escuela, Propuesta, Biografía y Foto
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                className="text-slate-400 hover:text-slate-600 font-bold text-base p-1"
+                onClick={() => setShowImportCandModal(false)}
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Barra de Descarga de Plantilla Oficial */}
+            <div className="flex items-center justify-between p-3.5 bg-blue-50/70 border border-blue-100 rounded-2xl">
+              <div className="text-xs text-blue-900">
+                <span className="font-bold block">¿No tienes el formato exacto?</span>
+                <span className="text-blue-700 text-[11px]">Descarga la planilla oficial con ejemplos para los 5 estamentos.</span>
+              </div>
+              <button
+                type="button"
+                onClick={handleDownloadCandTemplate}
+                className="px-3.5 py-2 rounded-xl bg-[#0b5294] hover:bg-[#0a4278] text-white text-xs font-bold transition flex items-center gap-1.5 shadow-sm shrink-0"
+              >
+                <span>📥</span> Descargar Plantilla (.xlsx)
+              </button>
+            </div>
+
+            {/* Selector de Archivo / Dropzone */}
+            <div className="space-y-2">
+              <label className="block text-xs font-bold text-slate-700">
+                Selecciona archivo de candidatos (.xlsx, .xls o .csv):
+              </label>
+              <div className="border-2 border-dashed border-slate-300 hover:border-blue-500 rounded-2xl p-6 text-center bg-slate-50 transition">
+                <input
+                  type="file"
+                  accept=".xlsx, .xls, .csv"
+                  onChange={(e) => void handleSelectImportCandFile(e.target.files?.[0] || null)}
+                  className="hidden"
+                  id="candidatos-upload-input"
+                />
+                <label
+                  htmlFor="candidatos-upload-input"
+                  className="cursor-pointer flex flex-col items-center gap-2"
+                >
+                  <span className="text-3xl">📊</span>
+                  <span className="text-xs font-bold text-slate-800">
+                    {importCandFile ? importCandFile.name : 'Haz clic aquí para seleccionar tu archivo Excel o CSV'}
+                  </span>
+                  <span className="text-[11px] text-slate-500">
+                    Soporta columnas N°, Nombre Completo, Estamento, RBD, Establecimiento, Propuesta, Biografía, Foto
+                  </span>
+                </label>
+              </div>
+            </div>
+
+            {/* Modo de Ingesta */}
+            <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200 space-y-2 text-xs">
+              <span className="font-bold text-slate-800 block">Modo de Ingesta:</span>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <label className={`flex items-start gap-2 p-2.5 rounded-xl border cursor-pointer transition ${!importReplaceMode ? 'bg-blue-50/80 border-blue-300 text-blue-900 font-semibold' : 'bg-white border-slate-200 text-slate-700'}`}>
+                  <input
+                    type="radio"
+                    name="importMode"
+                    checked={!importReplaceMode}
+                    onChange={() => setImportReplaceMode(false)}
+                    className="mt-0.5"
+                  />
+                  <div>
+                    <span className="font-bold block">➕ Agregar / Actualizar</span>
+                    <span className="text-[11px] text-slate-500">Mantiene las candidaturas existentes e incorpora las nuevas.</span>
+                  </div>
+                </label>
+
+                <label className={`flex items-start gap-2 p-2.5 rounded-xl border cursor-pointer transition ${importReplaceMode ? 'bg-amber-50/80 border-amber-300 text-amber-900 font-semibold' : 'bg-white border-slate-200 text-slate-700'}`}>
+                  <input
+                    type="radio"
+                    name="importMode"
+                    checked={importReplaceMode}
+                    onChange={() => setImportReplaceMode(true)}
+                    className="mt-0.5"
+                  />
+                  <div>
+                    <span className="font-bold block">🔄 Reemplazar Catálogo</span>
+                    <span className="text-[11px] text-slate-500">Vacía las candidaturas anteriores y carga exclusivamente esta lista.</span>
+                  </div>
+                </label>
+              </div>
+            </div>
+
+            {/* Previsualización de Candidatos a Importar */}
+            {importCandPreview ? (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-slate-800">
+                    Vista Previa de Candidaturas ({importCandPreview.records.length} válidas de {importCandPreview.totalFilasLeidas} leídas):
+                  </span>
+                </div>
+
+                <div className="max-h-52 overflow-y-auto border border-slate-200 rounded-2xl bg-white">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead>
+                      <tr className="bg-slate-50 border-b border-slate-200 text-[11px] font-bold text-slate-600 uppercase">
+                        <th className="py-2 px-3">N°</th>
+                        <th className="py-2 px-3">Nombre</th>
+                        <th className="py-2 px-3">Estamento</th>
+                        <th className="py-2 px-3">RBD</th>
+                        <th className="py-2 px-3">Establecimiento</th>
+                        <th className="py-2 px-3">Propuesta</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {importCandPreview.records.map((r, idx) => (
+                        <tr key={idx} className="hover:bg-slate-50">
+                          <td className="py-1.5 px-3 font-bold text-blue-900 font-mono">
+                            {r.numero ?? '-'}
+                          </td>
+                          <td className="py-1.5 px-3 font-semibold text-slate-900 whitespace-nowrap">
+                            {r.nombreCompleto}
+                          </td>
+                          <td className="py-1.5 px-3">
+                            <span className="inline-block px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-700 capitalize">
+                              {r.estamento}
+                            </span>
+                          </td>
+                          <td className="py-1.5 px-3 font-mono text-slate-600">
+                            {r.rbd || '-'}
+                          </td>
+                          <td className="py-1.5 px-3 text-slate-700 max-w-[150px] truncate" title={r.escuelaEstablecimiento}>
+                            {r.escuelaEstablecimiento}
+                          </td>
+                          <td className="py-1.5 px-3 text-slate-600 max-w-[200px] truncate italic" title={r.propuestaPrincipal}>
+                            {r.propuestaPrincipal}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {importCandPreview.erroresDetalle.length > 0 && (
+                  <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-xs text-amber-800 space-y-1 max-h-28 overflow-y-auto">
+                    <span className="font-bold block">⚠️ Advertencias en {importCandPreview.erroresDetalle.length} filas del archivo:</span>
+                    {importCandPreview.erroresDetalle.map((err, i) => (
+                      <p key={i} className="text-[11px] m-0">
+                        • Fila {err.fila}: {err.motivo} {err.candidato ? `(${err.candidato})` : ''}
+                      </p>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ) : null}
+
+            {importCandError && (
+              <div className="p-3 rounded-xl bg-red-50 text-red-700 font-semibold text-xs border border-red-200">
+                ⚠️ {importCandError}
+              </div>
+            )}
+
+            {importCandSuccessMessage && (
+              <div className="p-3 rounded-xl bg-emerald-50 text-emerald-700 font-semibold text-xs border border-emerald-200">
+                ✅ {importCandSuccessMessage}
+              </div>
+            )}
+
+            <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
+              <button
+                type="button"
+                className="px-4 py-2 rounded-xl border border-slate-200 font-bold text-xs text-slate-600 hover:bg-slate-50"
+                onClick={() => setShowImportCandModal(false)}
+                disabled={importingCandidates}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmImportCandidates}
+                disabled={importingCandidates || !importCandPreview || importCandPreview.records.length === 0}
+                className="px-5 py-2 rounded-xl bg-blue-600 text-white font-bold text-xs hover:bg-blue-700 transition disabled:opacity-50 shadow-md flex items-center gap-1.5"
+              >
+                {importingCandidates ? (
+                  <>
+                    <span className="animate-spin">⏳</span> Ingestando...
+                  </>
+                ) : (
+                  <>
+                    <span>🚀</span> Confirmar e Ingestar Candidatos
+                  </>
+                )}
               </button>
             </div>
           </div>

@@ -18,14 +18,40 @@ describe('rut-validator', () => {
     expect(res.formattedRut).toBe('16.940.271-K');
   });
 
-  it('rechaza un RUN con dígito verificador matemático incorrecto', () => {
-    const res = cleanAndValidateRUT('12.345.678-9');
-    expect(res.valid).toBe(false);
-    expect(res.errorReason).toContain('Módulo 11');
+  it('valida correctamente RUNs o IPE de extranjeros en el rango 100.000.000+', () => {
+    // 100.000.000-7
+    const res1 = cleanAndValidateRUT('100.000.000-7');
+    expect(res1.valid).toBe(true);
+    expect(res1.cleanRut).toBe('1000000007');
+    expect(res1.formattedRut).toBe('100.000.000-7');
+
+    // 100.123.456-7
+    const res2 = cleanAndValidateRUT('100.123.456-7');
+    expect(res2.valid).toBe(true);
+    expect(res2.cleanRut).toBe('1001234567');
+    expect(res2.formattedRut).toBe('100.123.456-7');
+
+    // Autocálculo de DV para 100 millones sin DV explícito
+    const res3 = cleanAndValidateRUT(100000000);
+    expect(res3.valid).toBe(true);
+    expect(res3.cleanRut).toBe('1000000007');
+    expect(res3.autoCorrected).toBe(true);
   });
 
-  it('formatea un RUN limpio correctamente', () => {
+  it('genera mensajes de alerta claros y descriptivos para RUNs inválidos o IPE erróneos', () => {
+    const resInvalidIpe = cleanAndValidateRUT('100.000.000-9');
+    expect(resInvalidIpe.valid).toBe(false);
+    expect(resInvalidIpe.errorReason).toContain('100.000.000');
+    expect(resInvalidIpe.errorReason).toContain('extranjero o provisorio');
+
+    const resIncomplete = cleanAndValidateRUT('12345-6');
+    expect(resIncomplete.valid).toBe(false);
+    expect(resIncomplete.errorReason).toContain('incompleto');
+  });
+
+  it('formatea un RUN limpio correctamente (estándar e IPE)', () => {
     expect(formatRut('123456785')).toBe('12.345.678-5');
+    expect(formatRut('1000000007')).toBe('100.000.000-7');
   });
 });
 

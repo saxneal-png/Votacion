@@ -46,11 +46,13 @@ export async function POST(request: NextRequest) {
     }
 
     const newCandidate = await addCandidatoAsync({
+      id: body.id,
       nombreCompleto: body.nombreCompleto,
       estamento: body.estamento,
       biografia: body.biografia || '',
       propuestaPrincipal: body.propuestaPrincipal,
       escuelaEstablecimiento: body.escuelaEstablecimiento,
+      rbd: body.rbd,
       fotoPerfil: body.fotoPerfil,
       numero: body.numero != null && !Number.isNaN(Number(body.numero)) ? Number(body.numero) : null,
     });
@@ -83,6 +85,7 @@ export async function PUT(request: NextRequest) {
       biografia: body.biografia,
       propuestaPrincipal: body.propuestaPrincipal,
       escuelaEstablecimiento: body.escuelaEstablecimiento,
+      rbd: body.rbd,
       fotoPerfil: body.fotoPerfil,
       numero: body.numero !== undefined ? (body.numero != null && !Number.isNaN(Number(body.numero)) ? Number(body.numero) : null) : undefined,
     });
