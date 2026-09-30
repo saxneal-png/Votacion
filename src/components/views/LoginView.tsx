@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { HelpTooltip } from '@/components/HelpTooltip';
+import { buildWhatsAppLink, DEFAULT_WHATSAPP_TEMPLATE, type ElectionConfig } from '@/lib/election-config-store';
 
 function validateRut(number: string, verifier: string): 'valid' | 'invalid' | 'empty' {
   if (!number || !verifier) return 'empty';
@@ -47,6 +48,8 @@ interface LoginViewProps {
   isSubmitting: boolean;
   isLocked: boolean;
   errorMessage: string | null;
+  supportConfig?: Partial<ElectionConfig> | null;
+  onOpenSupportModal?: () => void;
   onVoterTypeChange: (type: VoterType) => void;
   onRutNumberChange: (value: string) => void;
   onRutVerifierChange: (value: string) => void;
@@ -67,6 +70,8 @@ export function LoginView({
   isSubmitting,
   isLocked,
   errorMessage,
+  supportConfig,
+  onOpenSupportModal,
   onVoterTypeChange,
   onRutNumberChange,
   onRutVerifierChange,
@@ -370,9 +375,59 @@ export function LoginView({
         ) : (
           <>
             {errorMessage ? (
-              <p id="login-form-error" role="alert" aria-live="assertive" className="m-0 px-3.5 py-2.5 rounded-xl text-[13px] font-sans font-medium text-red-600 bg-red-50 border border-red-200">
-                {errorMessage}
-              </p>
+              <div id="login-form-error" role="alert" aria-live="assertive" className="m-0 p-3.5 rounded-2xl bg-red-50/90 border border-red-200 text-red-900 space-y-2.5">
+                <p className="m-0 text-[13px] font-sans font-medium leading-snug">
+                  {errorMessage}
+                </p>
+
+                {supportConfig?.habilitarSoporte !== false ? (
+                  <div className="pt-2 border-t border-red-200/70 flex flex-wrap items-center justify-between gap-2">
+                    <span className="text-[11px] font-bold text-red-800 flex items-center gap-1">
+                      <span>🆘</span> ¿Necesitas ayuda con tu acceso?
+                    </span>
+                    <div className="flex items-center gap-2">
+                      {supportConfig?.whatsappSoporte ? (
+                        <a
+                          href={buildWhatsAppLink(
+                            supportConfig.whatsappSoporte,
+                            supportConfig.mensajeWhatsappPlantilla,
+                            {
+                              rut: rutNumber && rutVerifier ? `${formatRutNumber(rutNumber)}-${rutVerifier.toUpperCase()}` : undefined,
+                              estamento: voterType === 'apoderado' ? 'Apoderado' : 'Funcionario SLEP',
+                            }
+                          )}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold shadow-xs transition"
+                          title="Contactar a Mesa de Ayuda por WhatsApp con tu RUN pre-cargado"
+                        >
+                          <span>💬</span> WhatsApp
+                        </a>
+                      ) : null}
+
+                      {supportConfig?.telefonoSoporte ? (
+                        <a
+                          href={`tel:${String(supportConfig.telefonoSoporte).replace(/\s+/g, '')}`}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#0b5294] hover:bg-[#0a4278] text-white text-[11px] font-bold shadow-xs transition"
+                          title="Llamar directamente al número telefónico de Mesa de Ayuda"
+                        >
+                          <span>📞</span> Llamar ({supportConfig.telefonoSoporte})
+                        </a>
+                      ) : null}
+
+                      {onOpenSupportModal ? (
+                        <button
+                          type="button"
+                          onClick={onOpenSupportModal}
+                          className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-white hover:bg-red-100 text-red-800 border border-red-300 text-[11px] font-bold transition"
+                        >
+                          Más opciones
+                        </button>
+                      ) : null}
+                    </div>
+                  </div>
+                ) : null}
+              </div>
             ) : null}
 
             <button

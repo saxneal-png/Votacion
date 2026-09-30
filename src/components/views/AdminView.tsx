@@ -10,6 +10,7 @@ import { cleanAndValidateRUT } from '@/lib/rut-validator';
 import type { VotingRecordEntry } from '@/lib/voting-record-store';
 import { formatChileDateTime } from '@/lib/chile-time';
 import type { ElectionConfig, ElectionStatusCheck, EstamentoCodigo, EstadoEleccion } from '@/lib/election-config-store';
+import { DEFAULT_WHATSAPP_TEMPLATE, buildWhatsAppLink } from '@/lib/election-config-store';
 import { SchoolSelect } from '@/components/SchoolSelect';
 
 interface AdminViewProps {
@@ -348,6 +349,14 @@ export function AdminView({
   const [confBgImageUrl, setConfBgImageUrl] = useState('');
   const [confNombreInstitucion, setConfNombreInstitucion] = useState('');
 
+  // Support / Helpdesk State (Mesa de Ayuda)
+  const [confHabilitarSoporte, setConfHabilitarSoporte] = useState(true);
+  const [confTelefonoSoporte, setConfTelefonoSoporte] = useState('+56 42 220 0000');
+  const [confWhatsappSoporte, setConfWhatsappSoporte] = useState('+56 9 1234 5678');
+  const [confMensajeWhatsappPlantilla, setConfMensajeWhatsappPlantilla] = useState(DEFAULT_WHATSAPP_TEMPLATE);
+  const [confEmailSoporte, setConfEmailSoporte] = useState('soporte.elecciones@eduvallediguillin.gob.cl');
+  const [confHorarioAtencionSoporte, setConfHorarioAtencionSoporte] = useState('Lunes a Viernes de 08:30 a 17:30 hrs');
+
   function toDatetimeLocalString(isoOrDateString?: string): string {
     if (!isoOrDateString) return '';
     try {
@@ -420,6 +429,12 @@ export function AdminView({
         setConfLogoUrl(data.config.logoUrl || '');
         setConfBgImageUrl(data.config.bgImageUrl || '');
         setConfNombreInstitucion(data.config.nombreInstitucion || 'Servicio Local de Educación Pública Valle Diguillín');
+        setConfHabilitarSoporte(data.config.habilitarSoporte ?? true);
+        setConfTelefonoSoporte(data.config.telefonoSoporte || '+56 42 220 0000');
+        setConfWhatsappSoporte(data.config.whatsappSoporte || '+56 9 1234 5678');
+        setConfMensajeWhatsappPlantilla(data.config.mensajeWhatsappPlantilla || DEFAULT_WHATSAPP_TEMPLATE);
+        setConfEmailSoporte(data.config.emailSoporte || 'soporte.elecciones@eduvallediguillin.gob.cl');
+        setConfHorarioAtencionSoporte(data.config.horarioAtencionSoporte || 'Lunes a Viernes de 08:30 a 17:30 hrs');
       }
     } catch (err) {
       console.error('Error al obtener configuración electoral:', err);
@@ -454,6 +469,12 @@ export function AdminView({
           fechaInicio: new Date(confFechaInicio).toISOString(),
           fechaFin: new Date(confFechaFin).toISOString(),
           estadoEleccion: confEstado,
+          habilitarSoporte: confHabilitarSoporte,
+          telefonoSoporte: confTelefonoSoporte.trim(),
+          whatsappSoporte: confWhatsappSoporte.trim(),
+          mensajeWhatsappPlantilla: confMensajeWhatsappPlantilla.trim(),
+          emailSoporte: confEmailSoporte.trim(),
+          horarioAtencionSoporte: confHorarioAtencionSoporte.trim(),
         }),
         credentials: 'same-origin',
       });
@@ -461,7 +482,7 @@ export function AdminView({
       const data = (await res.json()) as { success: boolean; config?: ElectionConfig; windowStatus?: ElectionStatusCheck; message?: string };
 
       if (res.ok && data.success) {
-        setConfigMessage('✅ Configuración electoral, marca e imagen institucional guardadas exitosamente.');
+        setConfigMessage('✅ Configuración electoral, marca y canales de soporte guardados permanentemente.');
         if (data.config) setElectionConfig(data.config);
         if (data.windowStatus) setWindowStatus(data.windowStatus);
       } else {
@@ -2321,6 +2342,211 @@ az webapp config appsettings set --resource-group rg-slep-elecciones --name vota
                     </span>
                   </div>
                 </div>
+              </div>
+            </div>
+
+            {/* Card 4: Mesa de Ayuda y Canales de Soporte al Votante */}
+            <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-6">
+              <div className="border-b pb-3 border-slate-100 flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-2.5">
+                  <span className="text-2xl">📞</span>
+                  <div>
+                    <h3 className="font-serif font-bold text-sm text-slate-900">
+                      Mesa de Ayuda y Canales de Soporte al Votante (Permanente)
+                    </h3>
+                    <p className="text-[11px] text-slate-500 font-medium">
+                      Configura el número telefónico para llamadas directas, WhatsApp institucional con mensaje editable y correo de asistencia para los votantes que presenten problemas de acceso.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={confHabilitarSoporte}
+                      onChange={(e) => setConfHabilitarSoporte(e.target.checked)}
+                      className="sr-only peer"
+                    />
+                    <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
+                    <span className="ml-2.5 text-xs font-bold text-slate-700">
+                      {confHabilitarSoporte ? '🟢 Soporte Activo en Portal' : '⚪ Soporte Desactivado'}
+                    </span>
+                  </label>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                {/* Teléfono directo */}
+                <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
+                  <label className="block text-xs font-bold text-slate-800 uppercase flex items-center gap-1.5">
+                    <span>☎️</span> Teléfono Mesa de Ayuda
+                  </label>
+                  <input
+                    type="tel"
+                    className="w-full h-10 px-3 text-xs rounded-xl border border-slate-300 bg-white font-mono font-bold text-slate-800 focus:outline-none focus:border-[#0b5294]"
+                    value={confTelefonoSoporte}
+                    onChange={(e) => setConfTelefonoSoporte(e.target.value)}
+                    placeholder="+56 42 220 0000"
+                  />
+                  <div className="flex items-center justify-between text-[11px]">
+                    <span className="text-slate-500">Llamada directa</span>
+                    {confTelefonoSoporte && (
+                      <a
+                        href={`tel:${confTelefonoSoporte.replace(/\s+/g, '')}`}
+                        className="text-blue-600 font-bold hover:underline inline-flex items-center gap-1"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        Probar tel: ↗
+                      </a>
+                    )}
+                  </div>
+                </div>
+
+                {/* WhatsApp */}
+                <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
+                  <label className="block text-xs font-bold text-slate-800 uppercase flex items-center gap-1.5">
+                    <span>💬</span> WhatsApp de Asistencia
+                  </label>
+                  <input
+                    type="tel"
+                    className="w-full h-10 px-3 text-xs rounded-xl border border-slate-300 bg-white font-mono font-bold text-slate-800 focus:outline-none focus:border-[#0b5294]"
+                    value={confWhatsappSoporte}
+                    onChange={(e) => setConfWhatsappSoporte(e.target.value)}
+                    placeholder="+56 9 1234 5678"
+                  />
+                  <div className="flex items-center justify-between text-[11px]">
+                    <span className="text-slate-500">Incluye código de país (+56)</span>
+                    {confWhatsappSoporte && (
+                      <a
+                        href={buildWhatsAppLink(confWhatsappSoporte, confMensajeWhatsappPlantilla, { rut: '12.345.678-9', estamento: 'DOCENTES' })}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-emerald-700 font-bold hover:underline inline-flex items-center gap-1"
+                      >
+                        Probar wa.me ↗
+                      </a>
+                    )}
+                  </div>
+                </div>
+
+                {/* Email de soporte */}
+                <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
+                  <label className="block text-xs font-bold text-slate-800 uppercase flex items-center gap-1.5">
+                    <span>✉️</span> Correo Electrónico
+                  </label>
+                  <input
+                    type="email"
+                    className="w-full h-10 px-3 text-xs rounded-xl border border-slate-300 bg-white font-mono text-slate-800 focus:outline-none focus:border-[#0b5294]"
+                    value={confEmailSoporte}
+                    onChange={(e) => setConfEmailSoporte(e.target.value)}
+                    placeholder="soporte.elecciones@eduvallediguillin.gob.cl"
+                  />
+                  <span className="text-[11px] text-slate-500 block">
+                    Para consultas formales o incidencias
+                  </span>
+                </div>
+
+                {/* Horario de atención */}
+                <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
+                  <label className="block text-xs font-bold text-slate-800 uppercase flex items-center gap-1.5">
+                    <span>🕒</span> Horario de Operación
+                  </label>
+                  <input
+                    type="text"
+                    className="w-full h-10 px-3 text-xs rounded-xl border border-slate-300 bg-white font-medium text-slate-800 focus:outline-none focus:border-[#0b5294]"
+                    value={confHorarioAtencionSoporte}
+                    onChange={(e) => setConfHorarioAtencionSoporte(e.target.value)}
+                    placeholder="Lunes a Viernes de 08:30 a 17:30 hrs"
+                  />
+                  <span className="text-[11px] text-slate-500 block">
+                    Horario oficial de atención telefónica
+                  </span>
+                </div>
+              </div>
+
+              {/* Plantilla de mensaje de WhatsApp con variables editables */}
+              <div className="p-5 bg-gradient-to-br from-emerald-50/70 to-slate-50 rounded-xl border border-emerald-200/80 space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="space-y-0.5">
+                    <label className="text-xs font-bold text-slate-900 uppercase flex items-center gap-1.5">
+                      <span>✏️</span> Plantilla de Mensaje Pre-redactado de WhatsApp
+                    </label>
+                    <p className="text-[11px] text-slate-600">
+                      Cuando el votante hace clic en &quot;Contactar por WhatsApp&quot;, este texto se abrirá automáticamente en su aplicación.
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setConfMensajeWhatsappPlantilla(DEFAULT_WHATSAPP_TEMPLATE)}
+                      className="px-2.5 py-1 text-[11px] font-bold text-emerald-800 bg-white hover:bg-emerald-100 rounded-lg border border-emerald-300 transition"
+                    >
+                      Restablecer texto sugerido
+                    </button>
+                  </div>
+                </div>
+
+                {/* Chips de variables */}
+                <div className="flex items-center gap-2 flex-wrap text-xs">
+                  <span className="text-[11px] font-bold text-slate-600">Variables dinámicas disponibles:</span>
+                  <button
+                    type="button"
+                    onClick={() => setConfMensajeWhatsappPlantilla((prev) => `${prev} {RUT}`)}
+                    className="px-2 py-0.5 rounded-md bg-purple-100 hover:bg-purple-200 text-purple-900 text-[11px] font-mono font-bold border border-purple-300 transition cursor-pointer"
+                    title="Inserta la variable {RUT} que se reemplaza con el RUN del votante"
+                  >
+                    + &#123;RUT&#125;
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setConfMensajeWhatsappPlantilla((prev) => `${prev} {ESTAMENTO}`)}
+                    className="px-2 py-0.5 rounded-md bg-blue-100 hover:bg-blue-200 text-blue-900 text-[11px] font-mono font-bold border border-blue-300 transition cursor-pointer"
+                    title="Inserta la variable {ESTAMENTO} que se reemplaza con el estamento del votante"
+                  >
+                    + &#123;ESTAMENTO&#125;
+                  </button>
+                </div>
+
+                <textarea
+                  rows={3}
+                  className="w-full p-3 text-xs rounded-xl border border-slate-300 bg-white font-mono text-slate-800 focus:outline-none focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600"
+                  value={confMensajeWhatsappPlantilla}
+                  onChange={(e) => setConfMensajeWhatsappPlantilla(e.target.value)}
+                  placeholder="Escribe el mensaje plantilla..."
+                />
+
+                {/* Previsualización en Tiempo Real */}
+                <div className="p-3.5 bg-white rounded-xl border border-emerald-300/80 shadow-xs space-y-1.5">
+                  <div className="flex items-center justify-between text-[11px]">
+                    <span className="font-extrabold text-emerald-900 flex items-center gap-1.5">
+                      <span>👁️</span> Previsualización del mensaje recibido en WhatsApp (Simulación: RUN 12.345.678-9 / DOCENTES):
+                    </span>
+                    <span className="text-[10px] text-slate-400 font-mono">Vista del Votante</span>
+                  </div>
+                  <div className="p-2.5 bg-emerald-50 rounded-lg text-xs text-slate-800 font-medium border-l-4 border-emerald-500 whitespace-pre-wrap">
+                    &quot;{confMensajeWhatsappPlantilla
+                      .replace(/{RUT}/gi, '12.345.678-9')
+                      .replace(/{ESTAMENTO}/gi, 'DOCENTES')}&quot;
+                  </div>
+                </div>
+              </div>
+
+              {/* Botón de Guardado Rápido */}
+              <div className="pt-2 flex items-center justify-between border-t border-slate-100">
+                <span className="text-xs text-slate-500">
+                  ⚠️ Estos canales y mensajes quedarán permanentemente guardados en la base de datos institucional hasta nueva modificación.
+                </span>
+                <button
+                  type="button"
+                  onClick={handleSaveElectionConfig}
+                  disabled={savingConfig}
+                  className="px-5 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-extrabold rounded-xl transition shadow-md flex items-center gap-2 disabled:opacity-50"
+                >
+                  <span>💾</span> {savingConfig ? 'Guardando...' : 'Guardar Todos los Cambios'}
+                </button>
               </div>
             </div>
           </div>

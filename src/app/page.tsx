@@ -4,12 +4,14 @@ import React, { memo, useEffect, useRef, useState } from 'react';
 
 import { AccessibilityPanel } from '@/components/AccessibilityPanel';
 import { HelpTooltip } from '@/components/HelpTooltip';
+import { SupportHelpModal } from '@/components/SupportHelpModal';
 import { BallotSelectionView } from '@/components/views/BallotSelectionView';
 import { IntroView } from '@/components/views/IntroView';
 import { LoginView, VoterType } from '@/components/views/LoginView';
 import { OtpView } from '@/components/views/OtpView';
 import { SuccessView } from '@/components/views/SuccessView';
 import { VotingView } from '@/components/views/VotingView';
+import { buildWhatsAppLink, type ElectionConfig } from '@/lib/election-config-store';
 import {
   getCandidates,
   resetSession,
@@ -156,15 +158,70 @@ const StepProgress = memo(function StepProgress({ currentStep }: { currentStep: 
   );
 });
 
-const SupportStrip = memo(function SupportStrip() {
+interface SupportStripProps {
+  config?: Partial<ElectionConfig> | null;
+  onOpenModal: () => void;
+  context?: {
+    rut?: string;
+    estamento?: string;
+  };
+}
+
+const SupportStrip = memo(function SupportStrip({ config, onOpenModal, context }: SupportStripProps) {
+  if (config?.habilitarSoporte === false) {
+    return null;
+  }
+
+  const phone = config?.telefonoSoporte || '+56 42 220 0000';
+  const whatsapp = config?.whatsappSoporte || '+56 9 1234 5678';
+  const template = config?.mensajeWhatsappPlantilla;
+  const horario = config?.horarioAtencionSoporte || 'Lunes a Viernes de 08:30 a 17:30 hrs';
+  const whatsappUrl = buildWhatsAppLink(whatsapp, template, context);
+
   return (
-    <div className="mx-1 mt-2 rounded-2xl border border-slate-900/[0.08] bg-slate-50 px-4 py-3" data-decorative="true">
-      <p className="m-0 text-[11px] font-bold font-sans uppercase tracking-[0.14em] text-[#1c3d5c]">
-        Soporte visible durante la jornada
-      </p>
-      <p className="mt-1.5 mb-0 text-[13px] font-sans leading-relaxed text-[#4e6a85]">
-        Si hay incidencias de acceso, deriva al votante a la mesa de apoyo del establecimiento o al canal local definido para la jornada.
-      </p>
+    <div className="mx-1 mt-3 rounded-2xl border border-blue-200/80 bg-gradient-to-r from-blue-50/90 via-sky-50/70 to-blue-50/90 px-4 py-3.5 shadow-2xs">
+      <div className="flex flex-wrap items-center justify-between gap-2.5">
+        <div>
+          <p className="m-0 text-[11px] font-extrabold font-sans uppercase tracking-[0.14em] text-[#0b5294] flex items-center gap-1.5">
+            <span>📞</span> Mesa de Ayuda y Soporte al Votante
+          </p>
+          <p className="mt-1 mb-0 text-[12px] font-sans leading-relaxed text-[#2c4d6f]">
+            ¿Dudas con tu RUN o acceso? Nuestro equipo te asiste durante la jornada ({horario}).
+          </p>
+        </div>
+
+        <div className="flex items-center gap-2 flex-wrap">
+          {whatsapp ? (
+            <a
+              href={whatsappUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-xs transition"
+              title="Abrir chat de WhatsApp con la Mesa de Ayuda"
+            >
+              <span>💬</span> WhatsApp
+            </a>
+          ) : null}
+
+          {phone ? (
+            <a
+              href={`tel:${phone.replace(/\s+/g, '')}`}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#0b5294] hover:bg-[#0a4278] text-white text-xs font-bold shadow-xs transition"
+              title="Llamar directamente al número telefónico de soporte"
+            >
+              <span>📞</span> {phone}
+            </a>
+          ) : null}
+
+          <button
+            type="button"
+            onClick={onOpenModal}
+            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-white hover:bg-blue-50 text-[#0b5294] border border-blue-300 text-xs font-bold shadow-2xs transition"
+          >
+            Ver canales ℹ️
+          </button>
+        </div>
+      </div>
     </div>
   );
 });
@@ -198,6 +255,7 @@ export default function HomePage() {
   const [isTtsEnabled, setIsTtsEnabled] = useState(false);
   const [fontScale, setFontScale] = useState<FontScale>('normal');
   const [isAccessibilityPanelOpen, setIsAccessibilityPanelOpen] = useState(false);
+  const [isSupportModalOpen, setIsSupportModalOpen] = useState(false);
   const [idleWarningSeconds, setIdleWarningSeconds] = useState<number | null>(null);
   const [showMultiTabWarning, setShowMultiTabWarning] = useState(false);
   const [receiptIssuedAt, setReceiptIssuedAt] = useState<string>('');
@@ -211,6 +269,14 @@ export default function HomePage() {
     logoUrl?: string;
     bgImageUrl?: string;
   }>({});
+  const [supportConfig, setSupportConfig] = useState<Partial<ElectionConfig>>({
+    habilitarSoporte: true,
+    telefonoSoporte: '+56 42 220 0000',
+    whatsappSoporte: '+56 9 1234 5678',
+    mensajeWhatsappPlantilla: undefined,
+    emailSoporte: 'soporte.elecciones@eduvallediguillin.gob.cl',
+    horarioAtencionSoporte: 'Lunes a Viernes de 08:30 a 17:30 hrs',
+  });
 
   const appStateRef = useRef(appState);
   const idleResetRef = useRef<() => void>(() => undefined);
@@ -227,7 +293,7 @@ export default function HomePage() {
   }, [appState]);
 
   useEffect(() => {
-    async function fetchBrandingConfig() {
+    async function fetchElectionConfig() {
       try {
         const res = await fetch('/api/election-config');
         if (res.ok) {
@@ -238,12 +304,20 @@ export default function HomePage() {
             logoUrl: data.logoUrl,
             bgImageUrl: data.bgImageUrl,
           });
+          setSupportConfig({
+            habilitarSoporte: data.habilitarSoporte,
+            telefonoSoporte: data.telefonoSoporte,
+            whatsappSoporte: data.whatsappSoporte,
+            mensajeWhatsappPlantilla: data.mensajeWhatsappPlantilla,
+            emailSoporte: data.emailSoporte,
+            horarioAtencionSoporte: data.horarioAtencionSoporte,
+          });
         }
       } catch (err) {
-        console.error('Error al obtener marca e imagen institucional:', err);
+        console.error('Error al obtener configuración electoral:', err);
       }
     }
-    void fetchBrandingConfig();
+    void fetchElectionConfig();
   }, []);
 
   useEffect(() => {
@@ -960,6 +1034,8 @@ export default function HomePage() {
                 isSubmitting={isSubmitting}
                 isLocked={isLoginLocked}
                 errorMessage={errorMessage}
+                supportConfig={supportConfig}
+                onOpenSupportModal={() => setIsSupportModalOpen(true)}
                 onVoterTypeChange={setVoterType}
                 onRutNumberChange={setRutNumber}
                 onRutVerifierChange={setRutVerifier}
@@ -981,6 +1057,8 @@ export default function HomePage() {
                 isSubmitting={isSubmitting}
                 isLocked={isOtpLocked}
                 errorMessage={errorMessage}
+                supportConfig={supportConfig}
+                onOpenSupportModal={() => setIsSupportModalOpen(true)}
                 onOtpChange={setOtp}
                 onBack={handleBackToLogin}
                 onSubmit={handleOtpSubmit}
@@ -1071,8 +1149,25 @@ export default function HomePage() {
             ) : null}
           </div>
 
-            <SupportStrip />
-          </div>
+          <SupportStrip
+            config={supportConfig}
+            onOpenModal={() => setIsSupportModalOpen(true)}
+            context={{
+              rut: rutNumber && rutVerifier ? `${rutNumber}-${rutVerifier}` : user?.rut,
+              estamento: user?.estamento || (voterType === 'apoderado' ? 'Apoderado' : 'Funcionario'),
+            }}
+          />
+        </div>
+
+          <SupportHelpModal
+            isOpen={isSupportModalOpen}
+            onClose={() => setIsSupportModalOpen(false)}
+            config={supportConfig}
+            context={{
+              rut: rutNumber && rutVerifier ? `${rutNumber}-${rutVerifier}` : user?.rut,
+              estamento: user?.estamento || (voterType === 'apoderado' ? 'Apoderado' : 'Funcionario'),
+            }}
+          />
 
           {isWindowHidden && isVisibilitySensitiveState ? (
             <div className="screen-shield" role="dialog" aria-modal="true" aria-labelledby="screen-shield-title" aria-describedby="screen-shield-description">

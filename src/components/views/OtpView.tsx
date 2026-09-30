@@ -4,6 +4,7 @@ import React, { useRef } from 'react';
 
 import { HelpTooltip } from '@/components/HelpTooltip';
 import type { Estamento, User } from '@/types';
+import { buildWhatsAppLink, type ElectionConfig } from '@/lib/election-config-store';
 
 const ESTAMENTO_LABELS: Record<Estamento, string> = {
   directivos: 'Directivos',
@@ -46,6 +47,8 @@ interface OtpViewProps {
   isSubmitting: boolean;
   isLocked: boolean;
   errorMessage: string | null;
+  supportConfig?: Partial<ElectionConfig> | null;
+  onOpenSupportModal?: () => void;
   onOtpChange: (value: string) => void;
   onBack: () => void;
   onSubmit: (event: React.FormEvent<HTMLFormElement>) => void;
@@ -64,6 +67,8 @@ export function OtpView({
   isSubmitting,
   isLocked,
   errorMessage,
+  supportConfig,
+  onOpenSupportModal,
   onOtpChange,
   onBack,
   onSubmit,
@@ -190,9 +195,59 @@ export function OtpView({
         </div>
 
         {errorMessage ? (
-          <p role="alert" aria-live="assertive" className="m-0 px-3.5 py-2.5 rounded-xl text-[13px] font-sans font-medium text-red-600 bg-red-50 border border-red-200">
-            {errorMessage}
-          </p>
+          <div role="alert" aria-live="assertive" className="m-0 p-3.5 rounded-2xl bg-red-50/90 border border-red-200 text-red-900 space-y-2.5">
+            <p className="m-0 text-[13px] font-sans font-medium leading-snug">
+              {errorMessage}
+            </p>
+
+            {supportConfig?.habilitarSoporte !== false ? (
+              <div className="pt-2 border-t border-red-200/70 flex flex-wrap items-center justify-between gap-2">
+                <span className="text-[11px] font-bold text-red-800 flex items-center gap-1">
+                  <span>🆘</span> ¿No recibiste tu código?
+                </span>
+                <div className="flex items-center gap-2">
+                  {supportConfig?.whatsappSoporte ? (
+                    <a
+                      href={buildWhatsAppLink(
+                        supportConfig.whatsappSoporte,
+                        supportConfig.mensajeWhatsappPlantilla,
+                        {
+                          rut: user?.rut ? maskFullName(user.rut) : undefined,
+                          estamento: user?.estamento ? ESTAMENTO_LABELS[user.estamento] : 'Votante',
+                        }
+                      )}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold shadow-xs transition"
+                      title="Contactar a Mesa de Ayuda por WhatsApp"
+                    >
+                      <span>💬</span> WhatsApp
+                    </a>
+                  ) : null}
+
+                  {supportConfig?.telefonoSoporte ? (
+                    <a
+                      href={`tel:${String(supportConfig.telefonoSoporte).replace(/\s+/g, '')}`}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#0b5294] hover:bg-[#0a4278] text-white text-[11px] font-bold shadow-xs transition"
+                      title="Llamar a Mesa de Ayuda"
+                    >
+                      <span>📞</span> Llamar
+                    </a>
+                  ) : null}
+
+                  {onOpenSupportModal ? (
+                    <button
+                      type="button"
+                      onClick={onOpenSupportModal}
+                      className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-white hover:bg-red-100 text-red-800 border border-red-300 text-[11px] font-bold transition"
+                    >
+                      Ayuda
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+            ) : null}
+          </div>
         ) : null}
 
         <div className="flex gap-2.5">

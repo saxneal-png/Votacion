@@ -27,6 +27,13 @@ export interface ElectionConfig {
   fechaInicio: string; // ISO string
   fechaFin: string;    // ISO string
   estadoEleccion: EstadoEleccion;
+  // Campos de Soporte al Votante / Mesa de Ayuda
+  habilitarSoporte?: boolean;
+  telefonoSoporte?: string;
+  whatsappSoporte?: string;
+  mensajeWhatsappPlantilla?: string;
+  emailSoporte?: string;
+  horarioAtencionSoporte?: string;
   updatedAt?: string;
 }
 
@@ -38,6 +45,9 @@ export interface ElectionStatusCheck {
   fechaFinFormatted: string;
   estamentosHabilitados: EstamentoCodigo[];
 }
+
+export const DEFAULT_WHATSAPP_TEMPLATE =
+  'Hola Mesa de Ayuda Electoral SLEP, tengo dificultades para ingresar a votar. Mi RUN es {RUT} y pertenezco al estamento {ESTAMENTO}. Solicito su asistencia.';
 
 const DEFAULT_CONFIG: ElectionConfig = {
   id: 'config_principal',
@@ -55,6 +65,12 @@ const DEFAULT_CONFIG: ElectionConfig = {
   fechaInicio: '2026-08-01T00:00:00.000Z',
   fechaFin: '2026-12-31T23:59:59.000Z',
   estadoEleccion: 'ABIERTA',
+  habilitarSoporte: true,
+  telefonoSoporte: '+56 42 220 0000',
+  whatsappSoporte: '+56 9 1234 5678',
+  mensajeWhatsappPlantilla: DEFAULT_WHATSAPP_TEMPLATE,
+  emailSoporte: 'soporte.elecciones@eduvallediguillin.gob.cl',
+  horarioAtencionSoporte: 'Lunes a Viernes de 08:30 a 17:30 hrs',
   updatedAt: new Date().toISOString(),
 };
 
@@ -65,6 +81,27 @@ declare global {
 
 let electionConfigStore: ElectionConfig =
   globalThis.__electionConfigStore ?? (globalThis.__electionConfigStore = { ...DEFAULT_CONFIG });
+
+/**
+ * Genera el enlace de WhatsApp con el mensaje personalizado y variables reemplazadas
+ */
+export function buildWhatsAppLink(
+  whatsappNumber: string,
+  template?: string,
+  context?: { rut?: string; estamento?: string }
+): string {
+  const cleanNumber = String(whatsappNumber || '').replace(/[^0-9]/g, '');
+  if (!cleanNumber) return '';
+
+  let text = template || DEFAULT_WHATSAPP_TEMPLATE;
+  const rutVal = context?.rut?.trim() || 'No especificado';
+  const estVal = context?.estamento?.trim() || 'Votante';
+
+  text = text.replace(/{RUT}/gi, rutVal);
+  text = text.replace(/{ESTAMENTO}/gi, estVal);
+
+  return `https://wa.me/${cleanNumber}?text=${encodeURIComponent(text)}`;
+}
 
 /**
  * Obtiene la configuración electoral actual desde Supabase o memoria
@@ -115,6 +152,30 @@ export async function getElectionConfigAsync(): Promise<ElectionConfig> {
       fechaInicio: String(data.fecha_inicio ?? DEFAULT_CONFIG.fechaInicio),
       fechaFin: String(data.fecha_fin ?? DEFAULT_CONFIG.fechaFin),
       estadoEleccion: (data.estado_eleccion as EstadoEleccion) || DEFAULT_CONFIG.estadoEleccion,
+      habilitarSoporte:
+        data.habilitar_soporte !== undefined && data.habilitar_soporte !== null
+          ? Boolean(data.habilitar_soporte)
+          : (electionConfigStore.habilitarSoporte ?? DEFAULT_CONFIG.habilitarSoporte),
+      telefonoSoporte:
+        data.telefono_soporte !== undefined && data.telefono_soporte !== null
+          ? String(data.telefono_soporte)
+          : (electionConfigStore.telefonoSoporte ?? DEFAULT_CONFIG.telefonoSoporte),
+      whatsappSoporte:
+        data.whatsapp_soporte !== undefined && data.whatsapp_soporte !== null
+          ? String(data.whatsapp_soporte)
+          : (electionConfigStore.whatsappSoporte ?? DEFAULT_CONFIG.whatsappSoporte),
+      mensajeWhatsappPlantilla:
+        data.mensaje_whatsapp_plantilla !== undefined && data.mensaje_whatsapp_plantilla !== null
+          ? String(data.mensaje_whatsapp_plantilla)
+          : (electionConfigStore.mensajeWhatsappPlantilla ?? DEFAULT_CONFIG.mensajeWhatsappPlantilla),
+      emailSoporte:
+        data.email_soporte !== undefined && data.email_soporte !== null
+          ? String(data.email_soporte)
+          : (electionConfigStore.emailSoporte ?? DEFAULT_CONFIG.emailSoporte),
+      horarioAtencionSoporte:
+        data.horario_atencion_soporte !== undefined && data.horario_atencion_soporte !== null
+          ? String(data.horario_atencion_soporte)
+          : (electionConfigStore.horarioAtencionSoporte ?? DEFAULT_CONFIG.horarioAtencionSoporte),
       updatedAt: String(data.updated_at ?? new Date().toISOString()),
     };
 
@@ -155,6 +216,12 @@ export async function saveElectionConfigAsync(config: Partial<ElectionConfig>): 
       if (updated.nombreInstitucion !== undefined) payload.nombre_institucion = updated.nombreInstitucion;
       if (updated.logoUrl !== undefined) payload.logo_url = updated.logoUrl;
       if (updated.bgImageUrl !== undefined) payload.bg_image_url = updated.bgImageUrl;
+      if (updated.habilitarSoporte !== undefined) payload.habilitar_soporte = updated.habilitarSoporte;
+      if (updated.telefonoSoporte !== undefined) payload.telefono_soporte = updated.telefonoSoporte;
+      if (updated.whatsappSoporte !== undefined) payload.whatsapp_soporte = updated.whatsappSoporte;
+      if (updated.mensajeWhatsappPlantilla !== undefined) payload.mensaje_whatsapp_plantilla = updated.mensajeWhatsappPlantilla;
+      if (updated.emailSoporte !== undefined) payload.email_soporte = updated.emailSoporte;
+      if (updated.horarioAtencionSoporte !== undefined) payload.horario_atencion_soporte = updated.horarioAtencionSoporte;
 
       const { error } = await supabaseAdmin
         .from('bd_configuracion_eleccion')
@@ -162,26 +229,24 @@ export async function saveElectionConfigAsync(config: Partial<ElectionConfig>): 
 
       if (error) {
         console.error('[SUPABASE] Error al guardar bd_configuracion_eleccion:', error.message);
-        if (
-          error.message.includes('nombre_institucion') ||
-          error.message.includes('logo_url') ||
-          error.message.includes('bg_image_url') ||
-          error.message.includes('column') ||
-          error.message.includes('schema cache') ||
-          error.message.includes('Could not find')
-        ) {
-          delete payload.nombre_institucion;
-          delete payload.logo_url;
-          delete payload.bg_image_url;
-          const { error: fallbackErr } = await supabaseAdmin
-            .from('bd_configuracion_eleccion')
-            .upsert(payload, { onConflict: 'id' });
-          if (!fallbackErr) {
-            console.log('[SUPABASE] Configuración electoral guardada en modo de compatibilidad legada.');
-          }
+        // Si fallan columnas que no existían previamente en Supabase, reintentar con las básicas
+        const fallbackPayload: Record<string, any> = {
+          id: 'config_principal',
+          titulo_proceso: updated.tituloProceso,
+          estamentos_habilitados: updated.estamentosHabilitados,
+          fecha_inicio: updated.fechaInicio,
+          fecha_fin: updated.fechaFin,
+          estado_eleccion: updated.estadoEleccion,
+          updated_at: updated.updatedAt,
+        };
+        const { error: fallbackErr } = await supabaseAdmin
+          .from('bd_configuracion_eleccion')
+          .upsert(fallbackPayload, { onConflict: 'id' });
+        if (!fallbackErr) {
+          console.log('[SUPABASE] Configuración electoral guardada en modo de compatibilidad legada.');
         }
       } else {
-        console.log('[SUPABASE] Configuración electoral guardada en Supabase.');
+        console.log('[SUPABASE] Configuración electoral guardada en Supabase de forma permanente.');
       }
     } catch (err) {
       console.error('[SUPABASE] Excepción al guardar bd_configuracion_eleccion:', err);
