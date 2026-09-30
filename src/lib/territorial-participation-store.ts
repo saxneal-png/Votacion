@@ -180,11 +180,12 @@ export async function getTerritorialParticipationReportAsync(): Promise<Territor
     if (!estKey) return;
 
     if (!schoolsDataMap.has(rbd)) {
+      // Consultar estrictamente la Base de Datos Maestra de Establecimientos Educacionales
       const masterInfo = schoolsMasterMap.get(rbd);
       schoolsDataMap.set(rbd, {
         rbd,
         nombre: masterInfo?.nombreOficial || p.nombreEstablecimiento || `Establecimiento RBD ${rbd}`,
-        comuna: masterInfo?.comuna?.trim() || 'Sin Comuna',
+        comuna: masterInfo?.comuna?.trim() || 'Sin Comuna Registrada',
         padronSets: {
           DOCENTES: new Set<string>(),
           ASISTENTES: new Set<string>(),
@@ -203,6 +204,14 @@ export async function getTerritorialParticipationReportAsync(): Promise<Territor
     }
 
     const schoolEntry = schoolsDataMap.get(rbd)!;
+    
+    // Si la comuna o nombre aún no provienen del maestro oficial, sincronizarla
+    const masterInfo = schoolsMasterMap.get(rbd);
+    if (masterInfo) {
+      if (masterInfo.nombreOficial) schoolEntry.nombre = masterInfo.nombreOficial;
+      if (masterInfo.comuna) schoolEntry.comuna = masterInfo.comuna.trim();
+    }
+
     schoolEntry.padronSets[estKey].add(cleanRut);
 
     if (p.haVotado) {
@@ -382,6 +391,7 @@ export async function generateTerritorialParticipationCsvAsync(): Promise<string
   lines.push('================================================================================');
   lines.push(`Proceso Electoral;${escapeCsv(report.tituloProceso)}`);
   lines.push(`Fecha y Hora de Emisión (Chile);${escapeCsv(report.fechaEmisionChile)}`);
+  lines.push('Fuente Comunal y Establecimientos;Base de Datos Oficial de Establecimientos Educacionales (bd_establecimientos_maestro)');
   lines.push(`Total de Comunas en el Territorio;${report.totalComunas}`);
   lines.push(`Total de Establecimientos Monitoreados;${report.totalEstablecimientos}`);
   lines.push(`Padrón Electoral Global Habilitado;${report.padronGlobal}`);
