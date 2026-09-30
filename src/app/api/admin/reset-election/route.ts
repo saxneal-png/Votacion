@@ -5,6 +5,7 @@ import { resetMetrics } from '@/lib/metrics-store';
 import { resetPadronVotesAsync } from '@/lib/padron-store';
 import { clearVotedUsers } from '@/lib/server-session';
 import { resetVotingRecords } from '@/lib/voting-record-store';
+import { resetAnonymousVotes } from '@/lib/anonymous-votes-store';
 import { supabaseAdmin } from '@/lib/supabase-client';
 
 export async function POST(request: NextRequest) {
@@ -32,6 +33,7 @@ export async function POST(request: NextRequest) {
 
     // 3. Vaciar urnas electrónicas y contadores de métricas
     resetMetrics();
+    resetAnonymousVotes();
 
     // 4. Vaciar el registro oficial de sufragios con folio (Memoria y Supabase acta_sufragio)
     resetVotingRecords();

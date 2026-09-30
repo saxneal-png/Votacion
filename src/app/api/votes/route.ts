@@ -4,6 +4,7 @@ import { NextResponse } from 'next/server';
 import { getCandidatoByIdAsync, getEstamentoVariants } from '@/lib/candidates-store';
 import { recordVote } from '@/lib/metrics-store';
 import { recordOfficialVote } from '@/lib/voting-record-store';
+import { recordAnonymousVote } from '@/lib/anonymous-votes-store';
 import { recordVoteInSupabase } from '@/lib/supabase-client';
 import {
   destroySessionAsync,
@@ -128,6 +129,11 @@ export async function POST(request: Request) {
 
     markUserAsVoted(userRut, userEstamento);
     recordVote(candidateId, userEstamento, userRbd);
+    recordAnonymousVote({
+      id: voteResult?.folio || voteResult?.receiptCode || voteResult?.comprobanteId,
+      estamento: userEstamento,
+      candidateId,
+    });
 
     // Registrar en el acta oficial local con el email y datos reales del votante
     recordOfficialVote({
