@@ -616,6 +616,10 @@ export function AdminView({
     window.open(`/api/admin/votos-anonimos/export?${params.toString()}`, '_blank');
   }
 
+  function handleExportTerritorialMetrics() {
+    window.open('/api/admin/export-participacion-territorial', '_blank');
+  }
+
   async function handleResetElection(e: React.FormEvent) {
     e.preventDefault();
     if (!resetAdminPin.trim()) return;
@@ -1469,6 +1473,16 @@ az webapp config appsettings set --resource-group rg-slep-elecciones --name vota
             >
               <span>🗳️</span>
               Votos Anónimos
+            </button>
+
+            <button
+              type="button"
+              onClick={handleExportTerritorialMetrics}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold shadow-sm transition"
+              title="Exportar métrica y porcentaje de participación por establecimiento, estamento y comuna (Mapeo territorial del padrón)"
+            >
+              <span>🗺️</span>
+              Mapeo Territorial
             </button>
 
             <button
@@ -2524,6 +2538,15 @@ az webapp config appsettings set --resource-group rg-slep-elecciones --name vota
               <div className="flex items-center gap-2.5 flex-wrap">
                 <button
                   type="button"
+                  onClick={handleExportTerritorialMetrics}
+                  className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-extrabold shadow-md transition"
+                  title="Descargar reporte de porcentaje de participación por establecimiento, estamento y comuna respecto al padrón habilitado para mapeo territorial"
+                >
+                  <span>🗺️</span> Participación Territorial (% Comunas y RBD)
+                </button>
+
+                <button
+                  type="button"
                   onClick={() => handleExportAnonymousVotes()}
                   className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-indigo-700 hover:bg-indigo-800 text-white text-xs font-extrabold shadow-md transition"
                   title="Descargar la urna electrónica completa con todos los sufragios anónimos emitidos (Evidencia oficial sin vincular al votante según secreto del voto)"
@@ -2537,7 +2560,7 @@ az webapp config appsettings set --resource-group rg-slep-elecciones --name vota
                   rel="noopener noreferrer"
                   className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-purple-700 hover:bg-purple-800 text-white text-xs font-extrabold shadow-md transition"
                 >
-                  <span>📥</span> Exportar Métricas y Resultados (CSV / Excel)
+                  <span>📥</span> Exportar Métricas Globales (CSV / Excel)
                 </a>
               </div>
             </div>
