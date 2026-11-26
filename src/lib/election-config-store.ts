@@ -567,30 +567,37 @@ export async function saveElectionConfigAsync(config: Partial<ElectionConfig>): 
       if (updated.loginEmailPlaceholder !== undefined) payload.login_email_placeholder = updated.loginEmailPlaceholder;
       if (updated.loginAllowedDomains !== undefined) payload.login_allowed_domains = updated.loginAllowedDomains;
 
-      const { error } = await supabaseAdmin
-        .from('bd_configuracion_eleccion')
-        .upsert(payload, { onConflict: 'id' });
+      let currentPayload: Record<string, any> = { ...payload };
+      let savedOk = false;
+      let lastErrorMsg = '';
 
-      if (error) {
-        console.error('[SUPABASE] Error al guardar bd_configuracion_eleccion:', error.message);
-        // Si fallan columnas que no existían previamente en Supabase, reintentar con las básicas
-        const fallbackPayload: Record<string, any> = {
-          id: 'config_principal',
-          titulo_proceso: updated.tituloProceso,
-          estamentos_habilitados: updated.estamentosHabilitados,
-          fecha_inicio: updated.fechaInicio,
-          fecha_fin: updated.fechaFin,
-          estado_eleccion: updated.estadoEleccion,
-          updated_at: updated.updatedAt,
-        };
-        const { error: fallbackErr } = await supabaseAdmin
+      for (let attempt = 0; attempt < 20; attempt++) {
+        const { error } = await supabaseAdmin
           .from('bd_configuracion_eleccion')
-          .upsert(fallbackPayload, { onConflict: 'id' });
-        if (!fallbackErr) {
-          console.log('[SUPABASE] Configuración electoral guardada en modo de compatibilidad legada.');
+          .upsert(currentPayload, { onConflict: 'id' });
+
+        if (!error) {
+          savedOk = true;
+          break;
         }
-      } else {
+
+        lastErrorMsg = error.message;
+        const postgrestMatch = error.message.match(/Could not find the '([^']+)' column/);
+        const pgMatch = error.message.match(/column "([^"]+)" of relation/);
+        const missingCol = postgrestMatch?.[1] || pgMatch?.[1];
+
+        if (missingCol && missingCol in currentPayload) {
+          console.warn(`[SUPABASE] Columna '${missingCol}' no existe en bd_configuracion_eleccion; omitiendo y reintentando.`);
+          delete currentPayload[missingCol];
+          continue;
+        }
+        break;
+      }
+
+      if (savedOk) {
         console.log('[SUPABASE] Configuración electoral guardada en Supabase de forma permanente.');
+      } else {
+        console.error('[SUPABASE] Error al guardar bd_configuracion_eleccion:', lastErrorMsg);
       }
     } catch (err) {
       console.error('[SUPABASE] Excepción al guardar bd_configuracion_eleccion:', err);

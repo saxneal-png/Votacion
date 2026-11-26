@@ -559,25 +559,63 @@ export async function processPadronChunkAsync(
   const erroresDetalle: Array<{ fila: number; rut?: string; motivo: string }> = [];
   const newRecords: PadronRecord[] = [];
 
+  // Pre-consultar registros existentes en Supabase para evitar duplicados persistidos
+  const existingKeysInDb = new Set<string>();
+  if (supabaseAdmin && records.length > 0) {
+    try {
+      const rutList = Array.from(new Set(records.map((r) => r.rutVotante).filter(Boolean)));
+      if (rutList.length > 0) {
+        const { data: dbRecords } = await supabaseAdmin
+          .from('bd_padron')
+          .select('rut_votante, estamento, rut_estudiante_asociado, rbd_establecimiento')
+          .in('rut_votante', rutList);
+
+        if (dbRecords) {
+          for (const d of dbRecords) {
+            const cleanR = String(d.rut_votante || '').replace(/[^0-9kK]/g, '').toUpperCase();
+            const est = String(d.estamento || '').trim().toUpperCase();
+            const cleanEst = String(d.rut_estudiante_asociado || '').replace(/[^0-9kK]/g, '').toUpperCase();
+            const rbd = String(d.rbd_establecimiento || '').trim();
+            existingKeysInDb.add(`${cleanR}___${est}___${cleanEst}___${rbd}`);
+          }
+        }
+      }
+    } catch (fetchErr) {
+      console.warn('[SUPABASE] No se pudo pre-verificar duplicados en bd_padron:', fetchErr);
+    }
+  }
+
+  const memoryKeys = new Set<string>();
+
   for (let i = 0; i < records.length; i++) {
     const item = records[i];
+    const cleanR = String(item.rutVotante || '').replace(/[^0-9kK]/g, '').toUpperCase();
+    const est = String(item.estamento || '').trim().toUpperCase();
+    const cleanEst = String(item.rutEstudianteAsociado || '').replace(/[^0-9kK]/g, '').toUpperCase();
+    const rbd = String(item.rbdEstablecimiento || '').trim();
+    const canonicalKey = `${cleanR}___${est}___${cleanEst}___${rbd}`;
 
-    const isDuplicate = padronStore.some((r) => {
+    const isDuplicateInDb = existingKeysInDb.has(canonicalKey);
+    const isDuplicateInBatch = memoryKeys.has(canonicalKey);
+    const isDuplicateInLocalStore = padronStore.some((r) => {
       if (r.estamento !== item.estamento) return false;
       if (item.estamento === 'PADRES_APODERADOS') {
-        return r.rutVotante === item.rutVotante && r.rutEstudianteAsociado === item.rutEstudianteAsociado;
+        return r.rutVotante === item.rutVotante && r.rutEstudianteAsociado === item.rutEstudianteAsociado && r.rbdEstablecimiento === item.rbdEstablecimiento;
       }
-      return r.rutVotante === item.rutVotante;
+      return r.rutVotante === item.rutVotante && r.rbdEstablecimiento === item.rbdEstablecimiento;
     });
 
-    if (isDuplicate) {
+    if (isDuplicateInDb || isDuplicateInBatch || isDuplicateInLocalStore) {
       erroresDetalle.push({
         fila: i + 1,
         rut: item.formattedRutVotante,
-        motivo: 'Registro duplicado ya existente en el padrón',
+        motivo: 'Registro duplicado ya existente en el padrón electoral',
       });
       continue;
     }
+
+    memoryKeys.add(canonicalKey);
+    existingKeysInDb.add(canonicalKey);
 
     const record: PadronRecord = {
       id: `padron-excel-${Date.now()}-${i}-${Math.random().toString(36).substring(2, 5)}`,
@@ -765,34 +803,36 @@ export async function getAllSchoolsAsync(): Promise<SchoolFilterOption[]> {
     }
   }
 
-  // 2. Consulta DISTINCT a bd_padron para capturar RBDs no presentes en el maestro
-  try {
-    // Paginación por lotes de 1.000 (respetando el límite por defecto de PostgREST)
-    const BATCH = 1000;
-    let page = 0;
-    let hasMore = true;
+  // 2. Solo si ni la vista ni el catálogo maestro devolvieron colegios, recorrer bd_padron
+  if (map.size === 0) {
+    try {
+      // Paginación por lotes de 1.000 (respetando el límite por defecto de PostgREST)
+      const BATCH = 1000;
+      let page = 0;
+      let hasMore = true;
 
-    while (hasMore) {
-      const { data, error } = await supabaseAdmin
-        .from('bd_padron')
-        .select('rbd_establecimiento, nombre_establecimiento')
-        .not('rbd_establecimiento', 'is', null)
-        .order('rbd_establecimiento', { ascending: true })
-        .range(page * BATCH, (page + 1) * BATCH - 1);
+      while (hasMore) {
+        const { data, error } = await supabaseAdmin
+          .from('bd_padron')
+          .select('rbd_establecimiento, nombre_establecimiento')
+          .not('rbd_establecimiento', 'is', null)
+          .order('rbd_establecimiento', { ascending: true })
+          .range(page * BATCH, (page + 1) * BATCH - 1);
 
-      if (error || !data || data.length === 0) { hasMore = false; break; }
+        if (error || !data || data.length === 0) { hasMore = false; break; }
 
-      data.forEach((item: Record<string, unknown>) => {
-        const rbd = String(item.rbd_establecimiento || '').trim();
-        const nombre = String(item.nombre_establecimiento || '').trim();
-        // Solo agregar si no está ya en el mapa (el maestro tiene prioridad)
-        if (rbd && nombre && !map.has(rbd)) map.set(rbd, nombre);
-      });
+        data.forEach((item: Record<string, unknown>) => {
+          const rbd = String(item.rbd_establecimiento || '').trim();
+          const nombre = String(item.nombre_establecimiento || '').trim();
+          // Solo agregar si no está ya en el mapa (el maestro tiene prioridad)
+          if (rbd && nombre && !map.has(rbd)) map.set(rbd, nombre);
+        });
 
-      if (data.length < BATCH) { hasMore = false; } else { page++; }
+        if (data.length < BATCH) { hasMore = false; } else { page++; }
+      }
+    } catch (err) {
+      console.error('[SUPABASE] Error obteniendo establecimientos de bd_padron:', err);
     }
-  } catch (err) {
-    console.error('[SUPABASE] Error obteniendo establecimientos de bd_padron:', err);
   }
 
   // 3. Fallback en memoria local si todo falló
@@ -948,7 +988,21 @@ export async function getPadronRecordsAsync({
     const from = (page - 1) * pageSize;
     const to = from + pageSize - 1;
 
-    const { data, count, error } = await query.range(from, to);
+    const { getCandidatosAsync } = await import('@/lib/candidates-store');
+
+    const [
+      { data, count, error },
+      allSchools,
+      { records: quorumRecords },
+      talliesMap,
+      allCandidates,
+    ] = await Promise.all([
+      query.range(from, to),
+      getAllSchoolsAsync(),
+      getAllPadronRecordsAsync({ search, estamento, rbd, slepId }),
+      getVoteTalliesAsync(slepId),
+      getCandidatosAsync({ estamento: 'ALL' }),
+    ]);
 
     if (error) {
       console.error('[SUPABASE] Error leyendo bd_padron:', error.message);
@@ -968,13 +1022,6 @@ export async function getPadronRecordsAsync({
     const records = (data || []).map((item) => mapRowToPadronRecord(item as Record<string, unknown>));
     const total = count ?? records.length;
     const totalPages = Math.ceil(total / pageSize) || 1;
-    const allSchools = await getAllSchoolsAsync();
-
-    // Obtener los registros necesarios para el cálculo exacto de quórums a nivel de padrón y escrutinio
-    const { records: quorumRecords } = await getAllPadronRecordsAsync({ search, estamento, rbd, slepId });
-    const talliesMap = await getVoteTalliesAsync(slepId);
-    const { getCandidatosAsync } = await import('@/lib/candidates-store');
-    const allCandidates = await getCandidatosAsync({ estamento: 'ALL' });
 
     const candidateVotesByEstamento: Record<string, number> = {
       ESTUDIANTES: 0,
@@ -1343,14 +1390,41 @@ export async function processPadronExcelBufferAsync(buffer: Buffer): Promise<Exc
       const BATCH_SIZE = 500;
       for (let i = 0; i < rows.length; i += BATCH_SIZE) {
         const batch = rows.slice(i, i + BATCH_SIZE);
+        const rutList = Array.from(new Set(batch.map((b) => b.rut_votante)));
+        const { data: existingRows } = await supabaseAdmin
+          .from('bd_padron')
+          .select('rut_votante, estamento, rut_estudiante_asociado, rbd_establecimiento')
+          .in('rut_votante', rutList);
+
+        const existingSet = new Set<string>();
+        if (existingRows) {
+          for (const d of existingRows) {
+            const cleanR = String(d.rut_votante || '').replace(/[^0-9kK]/g, '').toUpperCase();
+            const est = String(d.estamento || '').trim().toUpperCase();
+            const cleanEst = String(d.rut_estudiante_asociado || '').replace(/[^0-9kK]/g, '').toUpperCase();
+            const rbd = String(d.rbd_establecimiento || '').trim();
+            existingSet.add(`${cleanR}___${est}___${cleanEst}___${rbd}`);
+          }
+        }
+
+        const filteredBatch = batch.filter((b) => {
+          const cleanR = String(b.rut_votante || '').replace(/[^0-9kK]/g, '').toUpperCase();
+          const est = String(b.estamento || '').trim().toUpperCase();
+          const cleanEst = String(b.rut_estudiante_asociado || '').replace(/[^0-9kK]/g, '').toUpperCase();
+          const rbd = String(b.rbd_establecimiento || '').trim();
+          return !existingSet.has(`${cleanR}___${est}___${cleanEst}___${rbd}`);
+        });
+
+        if (filteredBatch.length === 0) continue;
+
         const { error } = await supabaseAdmin
           .from('bd_padron')
-          .insert(batch);
+          .insert(filteredBatch);
 
         if (error) {
           console.error(`[SUPABASE] Error en carga masiva Excel a bd_padron (Lote ${Math.floor(i / BATCH_SIZE) + 1}):`, error.message);
         } else {
-          console.log(`[SUPABASE] Lote de ${batch.length} registros cargados en bd_padron (${i + batch.length}/${result.registrosInsertados}).`);
+          console.log(`[SUPABASE] Lote de ${filteredBatch.length} registros cargados en bd_padron (${i + filteredBatch.length}/${result.registrosInsertados}).`);
         }
       }
     } catch (err) {

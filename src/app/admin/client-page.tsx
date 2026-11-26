@@ -5,7 +5,29 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { AdminView } from '@/components/views/AdminView';
 import type { AdminAuditEntry, AdminMetrics } from '@/types';
 
-const POLL_INTERVAL_MS = 8_000;
+const POLL_INTERVAL_MS = 25_000;
+
+const INITIAL_EMPTY_METRICS: AdminMetrics = {
+  lastUpdated: 0,
+  padron: {
+    total: 0,
+    directivos: 0,
+    docentes: 0,
+    asistentes: 0,
+    apoderados: 0,
+    estudiantes: 0,
+  },
+  votes: {
+    total: 0,
+    directivos: 0,
+    docentes: 0,
+    asistentes: 0,
+    apoderados: 0,
+    estudiantes: 0,
+  },
+  estamentos: [],
+  schools: [],
+};
 
 export default function AdminClientPage() {
   // ── Auth state ───────────────────────────────────────────────────────────
@@ -20,18 +42,22 @@ export default function AdminClientPage() {
   const [refreshing, setRefreshing] = useState(false);
 
   const intervalRef = useRef<number | null>(null);
+  const metricsInFlightRef = useRef(false);
 
   // ── Load metrics ─────────────────────────────────────────────────────────
   const loadMetrics = useCallback(async (background = false) => {
+    if (metricsInFlightRef.current) return undefined;
+    metricsInFlightRef.current = true;
     if (background) setRefreshing(true);
     try {
-      const res = await fetch('/api/admin/metrics', { credentials: 'same-origin' });
+      const res = await fetch('/api/admin/metrics', { credentials: 'same-origin', cache: 'no-store' });
       if (res.status === 401) return null;
-      if (!res.ok) return null;
+      if (!res.ok) return undefined;
       return (await res.json()) as AdminMetrics;
     } catch {
-      return null;
+      return undefined;
     } finally {
+      metricsInFlightRef.current = false;
       if (background) setRefreshing(false);
     }
   }, []);
@@ -70,10 +96,11 @@ export default function AdminClientPage() {
     if (!authenticated) return;
 
     const id = window.setInterval(async () => {
+      if (typeof document !== 'undefined' && document.hidden) return;
       const data = await loadMetrics(true);
       if (data === null) {
         handleSessionExpired();
-      } else {
+      } else if (data) {
         setMetrics(data);
       }
     }, POLL_INTERVAL_MS);
@@ -110,14 +137,17 @@ export default function AdminClientPage() {
 
     setPin('');
 
-    const [data] = await Promise.all([loadMetrics(), loadAudit()]);
-    if (!data) {
-      setAuthError('No se pudieron cargar las métricas.');
-      return;
-    }
-
-    setMetrics(data);
+    // Ingresar inmediatamente al panel con estado inicial y cargar métricas en segundo plano
+    setMetrics(INITIAL_EMPTY_METRICS);
     setAuthenticated(true);
+
+    void Promise.all([loadMetrics(true), loadAudit()]).then(([data]) => {
+      if (data === null) {
+        handleSessionExpired();
+      } else if (data) {
+        setMetrics(data);
+      }
+    });
   }
 
   // ── Logout ───────────────────────────────────────────────────────────────

@@ -40,29 +40,31 @@ export async function GET(request: NextRequest) {
   const slepId = url.searchParams.get('slep_id') || url.searchParams.get('slepId') || 'ALL';
   const schoolId = url.searchParams.get('school_id') || url.searchParams.get('rbd') || 'ALL';
 
-  // 1. Config del proceso electoral (para filtrar estamentos habilitados)
-  const electionConfig = await getElectionConfigAsync();
+  // Ejecutar todas las consultas independientes en paralelo para minimizar latencia
+  const [
+    electionConfig,
+    allCandidates,
+    { records: padronRecords, total: totalPadronCount },
+    { records: rawVotingRecords },
+    tallies,
+    allSchoolsList,
+  ] = await Promise.all([
+    getElectionConfigAsync(),
+    getCandidatosAsync({ estamento: 'ALL' }),
+    getAllPadronRecordsAsync({ rbd: schoolId, slepId }),
+    getVotingRecordsAsync(),
+    getVoteTalliesAsync(slepId, schoolId),
+    getAllSchoolsAsync(),
+  ]);
+
   const estamentosHabilitadosSet = new Set(
     (electionConfig.estamentosHabilitados ?? []).map((e: string) => e.toUpperCase())
   );
 
-  // 2. Obtener candidatos actualizados (Supabase / Store)
-  const allCandidates = await getCandidatosAsync({ estamento: 'ALL' });
-
-  // 3. Obtener padrón oficial sin truncamiento (paginación por lotes de 1.000 filas)
-  const { records: padronRecords, total: totalPadronCount } = await getAllPadronRecordsAsync({
-    rbd: schoolId,
-    slepId,
-  });
-
-  // 4. Obtener actas oficiales de voto desde Supabase (supabaseAdmin, sin límite de RLS)
-  const { records: rawVotingRecords } = await getVotingRecordsAsync();
   const votingRecords = rawVotingRecords.filter((v) => {
     if (schoolId !== 'ALL' && v.rbdEstablecimiento !== schoolId) return false;
     return true;
   });
-
-  const tallies = await getVoteTalliesAsync(slepId, schoolId);
 
   // ── Padrón totals por estamento ──────────────────────────────────────────
   const padron = {
@@ -232,8 +234,7 @@ export async function GET(request: NextRequest) {
   votes.total = Math.max(votingRecords.length, totalReconciledVotes);
 
 
-  // ── Escuelas: getAllSchoolsAsync + padronRecords cargado ──
-  const allSchoolsList = await getAllSchoolsAsync();
+  // ── Escuelas: allSchoolsList (cargado en paralelo) + padronRecords ──
 
   const realSchoolsMap = new Map<string, { rbd: string; name: string }>();
   allSchoolsList.forEach((s) => {

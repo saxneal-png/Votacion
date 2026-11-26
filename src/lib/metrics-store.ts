@@ -59,6 +59,18 @@ export async function getVoteTalliesAsync(_slepId?: string, _schoolId?: string):
   }
 
   try {
+    // Fast-path: intentar agregación directa en PostgreSQL vía RPC (1 sola consulta)
+    const { data: rpcData, error: rpcError } = await supabaseAdmin.rpc('rpc_vote_tallies');
+    if (!rpcError && Array.isArray(rpcData)) {
+      const rpcMap = new Map<string, number>();
+      for (const row of rpcData as Array<{ candidate_id?: string; total?: number | string }>) {
+        if (row.candidate_id) {
+          rpcMap.set(row.candidate_id, Number(row.total ?? 0));
+        }
+      }
+      return rpcMap;
+    }
+
     const supabaseMap = new Map<string, number>();
     const BATCH_SIZE = 1000;
     let page = 0;

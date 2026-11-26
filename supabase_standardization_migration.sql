@@ -3,6 +3,19 @@
 -- Permite adaptar la plataforma a cualquier proceso electoral sin código fijo.
 -- ============================================================================
 
+-- Marca e Imagen Institucional (por si faltan en tablas antiguas)
+ALTER TABLE bd_configuracion_eleccion ADD COLUMN IF NOT EXISTS nombre_institucion TEXT;
+ALTER TABLE bd_configuracion_eleccion ADD COLUMN IF NOT EXISTS logo_url TEXT;
+ALTER TABLE bd_configuracion_eleccion ADD COLUMN IF NOT EXISTS bg_image_url TEXT;
+
+-- Mesa de Ayuda y Soporte al Votante
+ALTER TABLE bd_configuracion_eleccion ADD COLUMN IF NOT EXISTS habilitar_soporte BOOLEAN DEFAULT true;
+ALTER TABLE bd_configuracion_eleccion ADD COLUMN IF NOT EXISTS telefono_soporte TEXT;
+ALTER TABLE bd_configuracion_eleccion ADD COLUMN IF NOT EXISTS whatsapp_soporte TEXT;
+ALTER TABLE bd_configuracion_eleccion ADD COLUMN IF NOT EXISTS mensaje_whatsapp_plantilla TEXT;
+ALTER TABLE bd_configuracion_eleccion ADD COLUMN IF NOT EXISTS email_soporte TEXT;
+ALTER TABLE bd_configuracion_eleccion ADD COLUMN IF NOT EXISTS horario_atencion_soporte TEXT;
+
 -- Plantilla de Correo OTP / Acreditación
 ALTER TABLE bd_configuracion_eleccion ADD COLUMN IF NOT EXISTS email_otp_subject TEXT;
 ALTER TABLE bd_configuracion_eleccion ADD COLUMN IF NOT EXISTS email_otp_header_title TEXT;
