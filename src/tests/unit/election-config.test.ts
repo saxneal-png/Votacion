@@ -4,6 +4,9 @@ import {
   saveElectionConfigAsync,
   checkVotingWindowStatusAsync,
   buildWhatsAppLink,
+  renderOtpEmailTemplate,
+  isEmailDomainAllowed,
+  parseAllowedDomains,
   type ElectionConfig,
 } from '@/lib/election-config-store';
 
@@ -129,6 +132,61 @@ describe('election-config-store', () => {
       await saveElectionConfigAsync({ habilitarSoporte: true });
       config = await getElectionConfigAsync();
       expect(config.habilitarSoporte).toBe(true);
+    });
+  });
+
+  describe('renderOtpEmailTemplate & domain helpers', () => {
+    it('reemplaza variables dinámicas y escapa HTML en la plantilla OTP', () => {
+      const { subject, html } = renderOtpEmailTemplate(
+        {
+          tituloProceso: 'Elección Directiva 2026',
+          nombreInstitucion: 'Asociación <Prueba>',
+          emailOtpSubject: 'Código {OTP} - {TITULO_PROCESO}',
+          emailOtpHeaderTitle: '{NOMBRE_INSTITUCION}',
+          emailOtpGreeting: 'Hola {NOMBRE_VOTANTE}',
+          emailOtpBodyText: 'Tu estamento es {ESTAMENTO} para {TITULO_PROCESO}.',
+          emailOtpShowCode: true,
+          emailOtpShowMagicLink: true,
+          emailOtpButtonText: 'Ir a votar',
+        },
+        {
+          otp: '654321',
+          voterName: 'Ana <Admin>',
+          estamentoLabel: 'DOCENTES',
+          magicLinkUrl: 'https://ejemplo.cl/votacion?token=abc',
+          senderEmail: 'no-reply@ejemplo.cl',
+        },
+      );
+
+      expect(subject).toBe('Código 654321 - Elección Directiva 2026');
+      expect(html).toContain('Asociación &lt;Prueba&gt;');
+      expect(html).toContain('Hola Ana &lt;Admin&gt;');
+      expect(html).toContain('654321');
+      expect(html).toContain('https://ejemplo.cl/votacion?token=abc');
+      expect(html).toContain('Ir a votar');
+    });
+
+    it('permite ocultar el bloque OTP o el enlace mágico según configuración', () => {
+      const { html } = renderOtpEmailTemplate(
+        {
+          emailOtpShowCode: true,
+          emailOtpShowMagicLink: false,
+        },
+        {
+          otp: '998877',
+          magicLinkUrl: 'https://ejemplo.cl/votacion?token=xyz',
+        },
+      );
+
+      expect(html).toContain('998877');
+      expect(html).not.toContain('https://ejemplo.cl/votacion?token=xyz');
+    });
+
+    it('valida dominios permitidos y soporta comodín *', () => {
+      expect(parseAllowedDomains('miempresa.cl, @otra.cl')).toEqual(['@miempresa.cl', '@otra.cl']);
+      expect(isEmailDomainAllowed('juan@miempresa.cl', 'miempresa.cl, @otra.cl')).toBe(true);
+      expect(isEmailDomainAllowed('juan@gmail.com', 'miempresa.cl, @otra.cl')).toBe(false);
+      expect(isEmailDomainAllowed('juan@gmail.com', '*')).toBe(true);
     });
   });
 });

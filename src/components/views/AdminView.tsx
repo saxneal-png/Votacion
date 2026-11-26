@@ -10,7 +10,13 @@ import { cleanAndValidateRUT } from '@/lib/rut-validator';
 import type { VotingRecordEntry } from '@/lib/voting-record-store';
 import { formatChileDateTime } from '@/lib/chile-time';
 import type { ElectionConfig, ElectionStatusCheck, EstamentoCodigo, EstadoEleccion } from '@/lib/election-config-store';
-import { DEFAULT_WHATSAPP_TEMPLATE, buildWhatsAppLink } from '@/lib/election-config-store';
+import {
+  DEFAULT_WHATSAPP_TEMPLATE,
+  DEFAULT_OTP_EMAIL_CONFIG,
+  DEFAULT_LOGIN_CONFIG,
+  buildWhatsAppLink,
+  renderOtpEmailTemplate,
+} from '@/lib/election-config-store';
 import { SchoolSelect } from '@/components/SchoolSelect';
 
 interface AdminViewProps {
@@ -357,6 +363,38 @@ export function AdminView({
   const [confEmailSoporte, setConfEmailSoporte] = useState('soporte.elecciones@eduvallediguillin.gob.cl');
   const [confHorarioAtencionSoporte, setConfHorarioAtencionSoporte] = useState('Lunes a Viernes de 08:30 a 17:30 hrs');
 
+  // OTP Email Template State
+  const [confEmailOtpSubject, setConfEmailOtpSubject] = useState<string>(DEFAULT_OTP_EMAIL_CONFIG.emailOtpSubject);
+  const [confEmailOtpHeaderTitle, setConfEmailOtpHeaderTitle] = useState<string>(DEFAULT_OTP_EMAIL_CONFIG.emailOtpHeaderTitle);
+  const [confEmailOtpHeaderSubtitle, setConfEmailOtpHeaderSubtitle] = useState<string>(DEFAULT_OTP_EMAIL_CONFIG.emailOtpHeaderSubtitle);
+  const [confEmailOtpGreeting, setConfEmailOtpGreeting] = useState<string>(DEFAULT_OTP_EMAIL_CONFIG.emailOtpGreeting);
+  const [confEmailOtpBodyText, setConfEmailOtpBodyText] = useState<string>(DEFAULT_OTP_EMAIL_CONFIG.emailOtpBodyText);
+  const [confEmailOtpShowCode, setConfEmailOtpShowCode] = useState<boolean>(DEFAULT_OTP_EMAIL_CONFIG.emailOtpShowCode);
+  const [confEmailOtpShowMagicLink, setConfEmailOtpShowMagicLink] = useState<boolean>(DEFAULT_OTP_EMAIL_CONFIG.emailOtpShowMagicLink);
+  const [confEmailOtpButtonText, setConfEmailOtpButtonText] = useState<string>(DEFAULT_OTP_EMAIL_CONFIG.emailOtpButtonText);
+  const [confEmailOtpFooterText, setConfEmailOtpFooterText] = useState<string>(DEFAULT_OTP_EMAIL_CONFIG.emailOtpFooterText);
+
+  // Login Page Customization State
+  const [confLoginTitle, setConfLoginTitle] = useState<string>(DEFAULT_LOGIN_CONFIG.loginTitle);
+  const [confLoginSubtitle, setConfLoginSubtitle] = useState<string>(DEFAULT_LOGIN_CONFIG.loginSubtitle);
+  const [confLoginShowInstructions, setConfLoginShowInstructions] = useState<boolean>(DEFAULT_LOGIN_CONFIG.loginShowInstructions);
+  const [confLoginInstructionsTitle, setConfLoginInstructionsTitle] = useState<string>(DEFAULT_LOGIN_CONFIG.loginInstructionsTitle);
+  const [confLoginStep1Title, setConfLoginStep1Title] = useState<string>(DEFAULT_LOGIN_CONFIG.loginStep1Title);
+  const [confLoginStep1Detail, setConfLoginStep1Detail] = useState<string>(DEFAULT_LOGIN_CONFIG.loginStep1Detail);
+  const [confLoginStep2Title, setConfLoginStep2Title] = useState<string>(DEFAULT_LOGIN_CONFIG.loginStep2Title);
+  const [confLoginStep2Detail, setConfLoginStep2Detail] = useState<string>(DEFAULT_LOGIN_CONFIG.loginStep2Detail);
+  const [confLoginStep3Title, setConfLoginStep3Title] = useState<string>(DEFAULT_LOGIN_CONFIG.loginStep3Title);
+  const [confLoginStep3Detail, setConfLoginStep3Detail] = useState<string>(DEFAULT_LOGIN_CONFIG.loginStep3Detail);
+  const [confLoginShowApoderadoMode, setConfLoginShowApoderadoMode] = useState<boolean>(DEFAULT_LOGIN_CONFIG.loginShowApoderadoMode);
+  const [confLoginShowFuncionarioMode, setConfLoginShowFuncionarioMode] = useState<boolean>(DEFAULT_LOGIN_CONFIG.loginShowFuncionarioMode);
+  const [confLoginApoderadoTabLabel, setConfLoginApoderadoTabLabel] = useState<string>(DEFAULT_LOGIN_CONFIG.loginApoderadoTabLabel);
+  const [confLoginFuncionarioTabLabel, setConfLoginFuncionarioTabLabel] = useState<string>(DEFAULT_LOGIN_CONFIG.loginFuncionarioTabLabel);
+  const [confLoginRutLabel, setConfLoginRutLabel] = useState<string>(DEFAULT_LOGIN_CONFIG.loginRutLabel);
+  const [confLoginStudentRutLabel, setConfLoginStudentRutLabel] = useState<string>(DEFAULT_LOGIN_CONFIG.loginStudentRutLabel);
+  const [confLoginEmailLabel, setConfLoginEmailLabel] = useState<string>(DEFAULT_LOGIN_CONFIG.loginEmailLabel);
+  const [confLoginEmailPlaceholder, setConfLoginEmailPlaceholder] = useState<string>(DEFAULT_LOGIN_CONFIG.loginEmailPlaceholder);
+  const [confLoginAllowedDomains, setConfLoginAllowedDomains] = useState<string>(DEFAULT_LOGIN_CONFIG.loginAllowedDomains);
+
   function toDatetimeLocalString(isoOrDateString?: string): string {
     if (!isoOrDateString) return '';
     try {
@@ -435,6 +473,34 @@ export function AdminView({
         setConfMensajeWhatsappPlantilla(data.config.mensajeWhatsappPlantilla || DEFAULT_WHATSAPP_TEMPLATE);
         setConfEmailSoporte(data.config.emailSoporte || 'soporte.elecciones@eduvallediguillin.gob.cl');
         setConfHorarioAtencionSoporte(data.config.horarioAtencionSoporte || 'Lunes a Viernes de 08:30 a 17:30 hrs');
+        setConfEmailOtpSubject(data.config.emailOtpSubject || DEFAULT_OTP_EMAIL_CONFIG.emailOtpSubject);
+        setConfEmailOtpHeaderTitle(data.config.emailOtpHeaderTitle || DEFAULT_OTP_EMAIL_CONFIG.emailOtpHeaderTitle);
+        setConfEmailOtpHeaderSubtitle(data.config.emailOtpHeaderSubtitle || DEFAULT_OTP_EMAIL_CONFIG.emailOtpHeaderSubtitle);
+        setConfEmailOtpGreeting(data.config.emailOtpGreeting || DEFAULT_OTP_EMAIL_CONFIG.emailOtpGreeting);
+        setConfEmailOtpBodyText(data.config.emailOtpBodyText || DEFAULT_OTP_EMAIL_CONFIG.emailOtpBodyText);
+        setConfEmailOtpShowCode(data.config.emailOtpShowCode ?? DEFAULT_OTP_EMAIL_CONFIG.emailOtpShowCode);
+        setConfEmailOtpShowMagicLink(data.config.emailOtpShowMagicLink ?? DEFAULT_OTP_EMAIL_CONFIG.emailOtpShowMagicLink);
+        setConfEmailOtpButtonText(data.config.emailOtpButtonText || DEFAULT_OTP_EMAIL_CONFIG.emailOtpButtonText);
+        setConfEmailOtpFooterText(data.config.emailOtpFooterText || DEFAULT_OTP_EMAIL_CONFIG.emailOtpFooterText);
+        setConfLoginTitle(data.config.loginTitle || DEFAULT_LOGIN_CONFIG.loginTitle);
+        setConfLoginSubtitle(data.config.loginSubtitle || DEFAULT_LOGIN_CONFIG.loginSubtitle);
+        setConfLoginShowInstructions(data.config.loginShowInstructions ?? DEFAULT_LOGIN_CONFIG.loginShowInstructions);
+        setConfLoginInstructionsTitle(data.config.loginInstructionsTitle || DEFAULT_LOGIN_CONFIG.loginInstructionsTitle);
+        setConfLoginStep1Title(data.config.loginStep1Title || DEFAULT_LOGIN_CONFIG.loginStep1Title);
+        setConfLoginStep1Detail(data.config.loginStep1Detail || DEFAULT_LOGIN_CONFIG.loginStep1Detail);
+        setConfLoginStep2Title(data.config.loginStep2Title || DEFAULT_LOGIN_CONFIG.loginStep2Title);
+        setConfLoginStep2Detail(data.config.loginStep2Detail || DEFAULT_LOGIN_CONFIG.loginStep2Detail);
+        setConfLoginStep3Title(data.config.loginStep3Title || DEFAULT_LOGIN_CONFIG.loginStep3Title);
+        setConfLoginStep3Detail(data.config.loginStep3Detail || DEFAULT_LOGIN_CONFIG.loginStep3Detail);
+        setConfLoginShowApoderadoMode(data.config.loginShowApoderadoMode ?? DEFAULT_LOGIN_CONFIG.loginShowApoderadoMode);
+        setConfLoginShowFuncionarioMode(data.config.loginShowFuncionarioMode ?? DEFAULT_LOGIN_CONFIG.loginShowFuncionarioMode);
+        setConfLoginApoderadoTabLabel(data.config.loginApoderadoTabLabel || DEFAULT_LOGIN_CONFIG.loginApoderadoTabLabel);
+        setConfLoginFuncionarioTabLabel(data.config.loginFuncionarioTabLabel || DEFAULT_LOGIN_CONFIG.loginFuncionarioTabLabel);
+        setConfLoginRutLabel(data.config.loginRutLabel || DEFAULT_LOGIN_CONFIG.loginRutLabel);
+        setConfLoginStudentRutLabel(data.config.loginStudentRutLabel || DEFAULT_LOGIN_CONFIG.loginStudentRutLabel);
+        setConfLoginEmailLabel(data.config.loginEmailLabel || DEFAULT_LOGIN_CONFIG.loginEmailLabel);
+        setConfLoginEmailPlaceholder(data.config.loginEmailPlaceholder || DEFAULT_LOGIN_CONFIG.loginEmailPlaceholder);
+        setConfLoginAllowedDomains(data.config.loginAllowedDomains ?? DEFAULT_LOGIN_CONFIG.loginAllowedDomains);
       }
     } catch (err) {
       console.error('Error al obtener configuración electoral:', err);
@@ -475,6 +541,34 @@ export function AdminView({
           mensajeWhatsappPlantilla: confMensajeWhatsappPlantilla.trim(),
           emailSoporte: confEmailSoporte.trim(),
           horarioAtencionSoporte: confHorarioAtencionSoporte.trim(),
+          emailOtpSubject: confEmailOtpSubject.trim(),
+          emailOtpHeaderTitle: confEmailOtpHeaderTitle.trim(),
+          emailOtpHeaderSubtitle: confEmailOtpHeaderSubtitle.trim(),
+          emailOtpGreeting: confEmailOtpGreeting.trim(),
+          emailOtpBodyText: confEmailOtpBodyText.trim(),
+          emailOtpShowCode: confEmailOtpShowCode,
+          emailOtpShowMagicLink: confEmailOtpShowMagicLink,
+          emailOtpButtonText: confEmailOtpButtonText.trim(),
+          emailOtpFooterText: confEmailOtpFooterText.trim(),
+          loginTitle: confLoginTitle.trim(),
+          loginSubtitle: confLoginSubtitle.trim(),
+          loginShowInstructions: confLoginShowInstructions,
+          loginInstructionsTitle: confLoginInstructionsTitle.trim(),
+          loginStep1Title: confLoginStep1Title.trim(),
+          loginStep1Detail: confLoginStep1Detail.trim(),
+          loginStep2Title: confLoginStep2Title.trim(),
+          loginStep2Detail: confLoginStep2Detail.trim(),
+          loginStep3Title: confLoginStep3Title.trim(),
+          loginStep3Detail: confLoginStep3Detail.trim(),
+          loginShowApoderadoMode: confLoginShowApoderadoMode,
+          loginShowFuncionarioMode: confLoginShowFuncionarioMode,
+          loginApoderadoTabLabel: confLoginApoderadoTabLabel.trim(),
+          loginFuncionarioTabLabel: confLoginFuncionarioTabLabel.trim(),
+          loginRutLabel: confLoginRutLabel.trim(),
+          loginStudentRutLabel: confLoginStudentRutLabel.trim(),
+          loginEmailLabel: confLoginEmailLabel.trim(),
+          loginEmailPlaceholder: confLoginEmailPlaceholder.trim(),
+          loginAllowedDomains: confLoginAllowedDomains.trim(),
         }),
         credentials: 'same-origin',
       });
@@ -2546,6 +2640,451 @@ az webapp config appsettings set --resource-group rg-slep-elecciones --name vota
                   className="px-5 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-extrabold rounded-xl transition shadow-md flex items-center gap-2 disabled:opacity-50"
                 >
                   <span>💾</span> {savingConfig ? 'Guardando...' : 'Guardar Todos los Cambios'}
+                </button>
+              </div>
+            </div>
+
+            {/* Card 5: Editor de Plantilla de Correo OTP y Acreditación */}
+            <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-6">
+              <div className="border-b pb-3 border-slate-100 flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-2.5">
+                  <span className="text-2xl">📧</span>
+                  <div>
+                    <h3 className="font-serif font-bold text-sm text-slate-900">
+                      Plantilla de Correo OTP y Enlace Mágico
+                    </h3>
+                    <p className="text-[11px] text-slate-500 font-medium">
+                      Personaliza el asunto, textos y elementos que llegan al correo de los votantes para cualquier tipo de elección.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setConfEmailOtpSubject(DEFAULT_OTP_EMAIL_CONFIG.emailOtpSubject);
+                    setConfEmailOtpHeaderTitle(DEFAULT_OTP_EMAIL_CONFIG.emailOtpHeaderTitle);
+                    setConfEmailOtpHeaderSubtitle(DEFAULT_OTP_EMAIL_CONFIG.emailOtpHeaderSubtitle);
+                    setConfEmailOtpGreeting(DEFAULT_OTP_EMAIL_CONFIG.emailOtpGreeting);
+                    setConfEmailOtpBodyText(DEFAULT_OTP_EMAIL_CONFIG.emailOtpBodyText);
+                    setConfEmailOtpShowCode(DEFAULT_OTP_EMAIL_CONFIG.emailOtpShowCode);
+                    setConfEmailOtpShowMagicLink(DEFAULT_OTP_EMAIL_CONFIG.emailOtpShowMagicLink);
+                    setConfEmailOtpButtonText(DEFAULT_OTP_EMAIL_CONFIG.emailOtpButtonText);
+                    setConfEmailOtpFooterText(DEFAULT_OTP_EMAIL_CONFIG.emailOtpFooterText);
+                  }}
+                  className="px-3 py-1.5 text-[11px] font-bold text-[#0b5294] bg-blue-50 hover:bg-blue-100 rounded-lg border border-blue-200 transition"
+                >
+                  Restablecer plantilla sugerida
+                </button>
+              </div>
+
+              <div className="flex items-center gap-2 flex-wrap text-xs bg-slate-50 p-3 rounded-xl border border-slate-200">
+                <span className="text-[11px] font-bold text-slate-700">Variables disponibles (clic para insertar en el cuerpo):</span>
+                {['{OTP}', '{NOMBRE_VOTANTE}', '{ESTAMENTO}', '{TITULO_PROCESO}', '{NOMBRE_INSTITUCION}'].map((variable) => (
+                  <button
+                    key={variable}
+                    type="button"
+                    onClick={() => setConfEmailOtpBodyText((prev) => `${prev} ${variable}`)}
+                    className="px-2 py-0.5 rounded-md bg-white hover:bg-blue-50 text-[#0b5294] text-[11px] font-mono font-bold border border-blue-200 transition cursor-pointer"
+                  >
+                    + {variable}
+                  </button>
+                ))}
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Asunto del Correo</label>
+                    <input
+                      type="text"
+                      className="w-full h-10 px-3 text-xs rounded-xl border border-slate-300 bg-white font-semibold text-slate-800 focus:outline-none focus:border-[#0b5294]"
+                      value={confEmailOtpSubject}
+                      onChange={(e) => setConfEmailOtpSubject(e.target.value)}
+                    />
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Título del Banner</label>
+                      <input
+                        type="text"
+                        className="w-full h-10 px-3 text-xs rounded-xl border border-slate-300 bg-white text-slate-800 focus:outline-none focus:border-[#0b5294]"
+                        value={confEmailOtpHeaderTitle}
+                        onChange={(e) => setConfEmailOtpHeaderTitle(e.target.value)}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Subtítulo del Banner</label>
+                      <input
+                        type="text"
+                        className="w-full h-10 px-3 text-xs rounded-xl border border-slate-300 bg-white text-slate-800 focus:outline-none focus:border-[#0b5294]"
+                        value={confEmailOtpHeaderSubtitle}
+                        onChange={(e) => setConfEmailOtpHeaderSubtitle(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Saludo Inicial</label>
+                    <input
+                      type="text"
+                      className="w-full h-10 px-3 text-xs rounded-xl border border-slate-300 bg-white text-slate-800 focus:outline-none focus:border-[#0b5294]"
+                      value={confEmailOtpGreeting}
+                      onChange={(e) => setConfEmailOtpGreeting(e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Mensaje Principal</label>
+                    <textarea
+                      rows={4}
+                      className="w-full p-3 text-xs rounded-xl border border-slate-300 bg-white text-slate-800 focus:outline-none focus:border-[#0b5294]"
+                      value={confEmailOtpBodyText}
+                      onChange={(e) => setConfEmailOtpBodyText(e.target.value)}
+                    />
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                    <label className="flex items-center gap-2 text-xs font-bold text-slate-700 cursor-pointer bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+                      <input
+                        type="checkbox"
+                        checked={confEmailOtpShowCode}
+                        onChange={(e) => setConfEmailOtpShowCode(e.target.checked)}
+                        className="w-4 h-4 rounded text-[#0b5294]"
+                      />
+                      Mostrar bloque de Código OTP
+                    </label>
+                    <label className="flex items-center gap-2 text-xs font-bold text-slate-700 cursor-pointer bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+                      <input
+                        type="checkbox"
+                        checked={confEmailOtpShowMagicLink}
+                        onChange={(e) => setConfEmailOtpShowMagicLink(e.target.checked)}
+                        className="w-4 h-4 rounded text-[#0b5294]"
+                      />
+                      Mostrar botón Enlace Mágico
+                    </label>
+                  </div>
+                  {confEmailOtpShowMagicLink && (
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Texto del Botón de Acceso</label>
+                      <input
+                        type="text"
+                        className="w-full h-10 px-3 text-xs rounded-xl border border-slate-300 bg-white text-slate-800 focus:outline-none focus:border-[#0b5294]"
+                        value={confEmailOtpButtonText}
+                        onChange={(e) => setConfEmailOtpButtonText(e.target.value)}
+                      />
+                    </div>
+                  )}
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Pie de Página / Advertencia</label>
+                    <textarea
+                      rows={2}
+                      className="w-full p-3 text-xs rounded-xl border border-slate-300 bg-white text-slate-800 focus:outline-none focus:border-[#0b5294]"
+                      value={confEmailOtpFooterText}
+                      onChange={(e) => setConfEmailOtpFooterText(e.target.value)}
+                    />
+                  </div>
+                </div>
+
+                {/* Vista Previa en Vivo del Correo */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-extrabold text-slate-800 flex items-center gap-1.5">
+                      <span>👁️</span> Vista Previa del Correo (Simulación)
+                    </span>
+                    <span className="text-[11px] font-mono text-slate-500 truncate max-w-[260px]">
+                      Asunto:{' '}
+                      {renderOtpEmailTemplate(
+                        {
+                          tituloProceso: confTitulo,
+                          nombreInstitucion: confNombreInstitucion,
+                          emailOtpSubject: confEmailOtpSubject,
+                        },
+                        { otp: '482910', voterName: 'María González', estamentoLabel: 'DOCENTES' }
+                      ).subject}
+                    </span>
+                  </div>
+                  <iframe
+                    title="Vista previa de correo OTP"
+                    sandbox=""
+                    className="w-full h-[460px] rounded-xl border border-slate-300 bg-slate-100"
+                    srcDoc={
+                      renderOtpEmailTemplate(
+                        {
+                          tituloProceso: confTitulo,
+                          nombreInstitucion: confNombreInstitucion,
+                          emailOtpSubject: confEmailOtpSubject,
+                          emailOtpHeaderTitle: confEmailOtpHeaderTitle,
+                          emailOtpHeaderSubtitle: confEmailOtpHeaderSubtitle,
+                          emailOtpGreeting: confEmailOtpGreeting,
+                          emailOtpBodyText: confEmailOtpBodyText,
+                          emailOtpShowCode: confEmailOtpShowCode,
+                          emailOtpShowMagicLink: confEmailOtpShowMagicLink,
+                          emailOtpButtonText: confEmailOtpButtonText,
+                          emailOtpFooterText: confEmailOtpFooterText,
+                        },
+                        {
+                          otp: '482910',
+                          voterName: 'María González',
+                          estamentoLabel: 'DOCENTES',
+                          magicLinkUrl: '#vista-previa',
+                          senderEmail: 'notificaciones@institucion.cl',
+                        }
+                      ).html
+                    }
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Card 6: Personalización de Página de Ingreso a la Votación */}
+            <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-6">
+              <div className="border-b pb-3 border-slate-100 flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-2.5">
+                  <span className="text-2xl">🚪</span>
+                  <div>
+                    <h3 className="font-serif font-bold text-sm text-slate-900">
+                      Personalización de Página de Ingreso a la Votación
+                    </h3>
+                    <p className="text-[11px] text-slate-500 font-medium">
+                      Adapta los textos, instrucciones, modalidades de acceso y dominios de correo permitidos según el tipo de elección.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setConfLoginTitle(DEFAULT_LOGIN_CONFIG.loginTitle);
+                    setConfLoginSubtitle(DEFAULT_LOGIN_CONFIG.loginSubtitle);
+                    setConfLoginShowInstructions(DEFAULT_LOGIN_CONFIG.loginShowInstructions);
+                    setConfLoginInstructionsTitle(DEFAULT_LOGIN_CONFIG.loginInstructionsTitle);
+                    setConfLoginStep1Title(DEFAULT_LOGIN_CONFIG.loginStep1Title);
+                    setConfLoginStep1Detail(DEFAULT_LOGIN_CONFIG.loginStep1Detail);
+                    setConfLoginStep2Title(DEFAULT_LOGIN_CONFIG.loginStep2Title);
+                    setConfLoginStep2Detail(DEFAULT_LOGIN_CONFIG.loginStep2Detail);
+                    setConfLoginStep3Title(DEFAULT_LOGIN_CONFIG.loginStep3Title);
+                    setConfLoginStep3Detail(DEFAULT_LOGIN_CONFIG.loginStep3Detail);
+                    setConfLoginShowApoderadoMode(DEFAULT_LOGIN_CONFIG.loginShowApoderadoMode);
+                    setConfLoginShowFuncionarioMode(DEFAULT_LOGIN_CONFIG.loginShowFuncionarioMode);
+                    setConfLoginApoderadoTabLabel(DEFAULT_LOGIN_CONFIG.loginApoderadoTabLabel);
+                    setConfLoginFuncionarioTabLabel(DEFAULT_LOGIN_CONFIG.loginFuncionarioTabLabel);
+                    setConfLoginRutLabel(DEFAULT_LOGIN_CONFIG.loginRutLabel);
+                    setConfLoginStudentRutLabel(DEFAULT_LOGIN_CONFIG.loginStudentRutLabel);
+                    setConfLoginEmailLabel(DEFAULT_LOGIN_CONFIG.loginEmailLabel);
+                    setConfLoginEmailPlaceholder(DEFAULT_LOGIN_CONFIG.loginEmailPlaceholder);
+                    setConfLoginAllowedDomains(DEFAULT_LOGIN_CONFIG.loginAllowedDomains);
+                  }}
+                  className="px-3 py-1.5 text-[11px] font-bold text-[#0b5294] bg-blue-50 hover:bg-blue-100 rounded-lg border border-blue-200 transition"
+                >
+                  Restablecer valores por defecto
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Título de la Pantalla de Ingreso</label>
+                  <input
+                    type="text"
+                    className="w-full h-10 px-3 text-xs rounded-xl border border-slate-300 bg-white font-semibold text-slate-800 focus:outline-none focus:border-[#0b5294]"
+                    value={confLoginTitle}
+                    onChange={(e) => setConfLoginTitle(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                    Dominios Permitidos (Perfil Interno / Funcionario)
+                  </label>
+                  <input
+                    type="text"
+                    className="w-full h-10 px-3 text-xs rounded-xl border border-slate-300 bg-white font-mono text-slate-800 focus:outline-none focus:border-[#0b5294]"
+                    value={confLoginAllowedDomains}
+                    onChange={(e) => setConfLoginAllowedDomains(e.target.value)}
+                    placeholder="@institucion.cl, @otra.cl (o * para cualquiera)"
+                  />
+                  <span className="text-[10px] text-slate-500 mt-1 block">
+                    Separados por coma. Usa <code>*</code> para permitir cualquier dominio de correo válido.
+                  </span>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Subtítulo / Mensaje de Bienvenida</label>
+                <textarea
+                  rows={2}
+                  className="w-full p-3 text-xs rounded-xl border border-slate-300 bg-white text-slate-800 focus:outline-none focus:border-[#0b5294]"
+                  value={confLoginSubtitle}
+                  onChange={(e) => setConfLoginSubtitle(e.target.value)}
+                />
+              </div>
+
+              {/* Modalidades de Ingreso */}
+              <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-4">
+                <p className="text-xs font-bold text-slate-800 uppercase m-0">Modalidades y Etiquetas del Formulario</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <label className="flex items-center gap-2 text-xs font-bold text-slate-700 cursor-pointer bg-white p-2.5 rounded-xl border border-slate-200">
+                    <input
+                      type="checkbox"
+                      checked={confLoginShowApoderadoMode}
+                      onChange={(e) => {
+                        if (!e.target.checked && !confLoginShowFuncionarioMode) return;
+                        setConfLoginShowApoderadoMode(e.target.checked);
+                      }}
+                      className="w-4 h-4 rounded text-[#0b5294]"
+                    />
+                    Habilitar pestaña Apoderado / con Carga
+                  </label>
+                  <label className="flex items-center gap-2 text-xs font-bold text-slate-700 cursor-pointer bg-white p-2.5 rounded-xl border border-slate-200">
+                    <input
+                      type="checkbox"
+                      checked={confLoginShowFuncionarioMode}
+                      onChange={(e) => {
+                        if (!e.target.checked && !confLoginShowApoderadoMode) return;
+                        setConfLoginShowFuncionarioMode(e.target.checked);
+                      }}
+                      className="w-4 h-4 rounded text-[#0b5294]"
+                    />
+                    Habilitar pestaña Funcionario / Interno
+                  </label>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-600 uppercase mb-1">Etiqueta Pestaña 1 (Apoderado / Externo)</label>
+                    <input
+                      type="text"
+                      className="w-full h-9 px-3 text-xs rounded-lg border border-slate-300 bg-white text-slate-800"
+                      value={confLoginApoderadoTabLabel}
+                      onChange={(e) => setConfLoginApoderadoTabLabel(e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-600 uppercase mb-1">Etiqueta Pestaña 2 (Funcionario / Interno)</label>
+                    <input
+                      type="text"
+                      className="w-full h-9 px-3 text-xs rounded-lg border border-slate-300 bg-white text-slate-800"
+                      value={confLoginFuncionarioTabLabel}
+                      onChange={(e) => setConfLoginFuncionarioTabLabel(e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-600 uppercase mb-1">Etiqueta Campo RUT Principal</label>
+                    <input
+                      type="text"
+                      className="w-full h-9 px-3 text-xs rounded-lg border border-slate-300 bg-white text-slate-800"
+                      value={confLoginRutLabel}
+                      onChange={(e) => setConfLoginRutLabel(e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-600 uppercase mb-1">Etiqueta Campo RUT Estudiante (si aplica)</label>
+                    <input
+                      type="text"
+                      className="w-full h-9 px-3 text-xs rounded-lg border border-slate-300 bg-white text-slate-800"
+                      value={confLoginStudentRutLabel}
+                      onChange={(e) => setConfLoginStudentRutLabel(e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-600 uppercase mb-1">Etiqueta Campo Correo</label>
+                    <input
+                      type="text"
+                      className="w-full h-9 px-3 text-xs rounded-lg border border-slate-300 bg-white text-slate-800"
+                      value={confLoginEmailLabel}
+                      onChange={(e) => setConfLoginEmailLabel(e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-600 uppercase mb-1">Ejemplo (Placeholder) de Correo</label>
+                    <input
+                      type="text"
+                      className="w-full h-9 px-3 text-xs rounded-lg border border-slate-300 bg-white font-mono text-slate-800"
+                      value={confLoginEmailPlaceholder}
+                      onChange={(e) => setConfLoginEmailPlaceholder(e.target.value)}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Bloque de Instrucciones */}
+              <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <label className="flex items-center gap-2 text-xs font-bold text-slate-800 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={confLoginShowInstructions}
+                      onChange={(e) => setConfLoginShowInstructions(e.target.checked)}
+                      className="w-4 h-4 rounded text-[#0b5294]"
+                    />
+                    Mostrar caja de instrucciones paso a paso en la página de ingreso
+                  </label>
+                </div>
+
+                {confLoginShowInstructions && (
+                  <div className="space-y-3 pt-1">
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-600 uppercase mb-1">Título de la Caja de Instrucciones</label>
+                      <input
+                        type="text"
+                        className="w-full h-9 px-3 text-xs rounded-lg border border-slate-300 bg-white text-slate-800"
+                        value={confLoginInstructionsTitle}
+                        onChange={(e) => setConfLoginInstructionsTitle(e.target.value)}
+                      />
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                      <div className="p-3 bg-white rounded-xl border border-slate-200 space-y-2">
+                        <input
+                          type="text"
+                          className="w-full h-8 px-2.5 text-xs font-bold rounded-lg border border-slate-200"
+                          value={confLoginStep1Title}
+                          onChange={(e) => setConfLoginStep1Title(e.target.value)}
+                          placeholder="Paso 1"
+                        />
+                        <textarea
+                          rows={2}
+                          className="w-full p-2 text-[11px] rounded-lg border border-slate-200"
+                          value={confLoginStep1Detail}
+                          onChange={(e) => setConfLoginStep1Detail(e.target.value)}
+                        />
+                      </div>
+                      <div className="p-3 bg-white rounded-xl border border-slate-200 space-y-2">
+                        <input
+                          type="text"
+                          className="w-full h-8 px-2.5 text-xs font-bold rounded-lg border border-slate-200"
+                          value={confLoginStep2Title}
+                          onChange={(e) => setConfLoginStep2Title(e.target.value)}
+                          placeholder="Paso 2"
+                        />
+                        <textarea
+                          rows={2}
+                          className="w-full p-2 text-[11px] rounded-lg border border-slate-200"
+                          value={confLoginStep2Detail}
+                          onChange={(e) => setConfLoginStep2Detail(e.target.value)}
+                        />
+                      </div>
+                      <div className="p-3 bg-white rounded-xl border border-slate-200 space-y-2">
+                        <input
+                          type="text"
+                          className="w-full h-8 px-2.5 text-xs font-bold rounded-lg border border-slate-200"
+                          value={confLoginStep3Title}
+                          onChange={(e) => setConfLoginStep3Title(e.target.value)}
+                          placeholder="Paso 3"
+                        />
+                        <textarea
+                          rows={2}
+                          className="w-full p-2 text-[11px] rounded-lg border border-slate-200"
+                          value={confLoginStep3Detail}
+                          onChange={(e) => setConfLoginStep3Detail(e.target.value)}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="pt-2 flex items-center justify-end border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={handleSaveElectionConfig}
+                  disabled={savingConfig}
+                  className="px-5 py-2.5 bg-[#0b5294] hover:bg-[#0a4278] text-white text-xs font-extrabold rounded-xl transition shadow-md flex items-center gap-2 disabled:opacity-50"
+                >
+                  <span>💾</span> {savingConfig ? 'Guardando...' : 'Guardar Configuración Completa'}
                 </button>
               </div>
             </div>

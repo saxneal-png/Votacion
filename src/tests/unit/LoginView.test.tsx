@@ -33,7 +33,21 @@ describe('LoginView', () => {
     renderLogin();
     expect(screen.getByPlaceholderText('12345678')).toBeInTheDocument();
     expect(screen.getByPlaceholderText('9')).toBeInTheDocument();
-    expect(screen.getByPlaceholderText('docente@eduvallediguillin.gob.cl')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('correo@institucion.cl')).toBeInTheDocument();
+  });
+
+  it('permite personalizar título, etiquetas y ocultar pestaña de apoderado via loginConfig', () => {
+    renderLogin({
+      loginConfig: {
+        loginTitle: 'Elección Directiva 2026',
+        loginShowApoderadoMode: false,
+        loginShowFuncionarioMode: true,
+        loginEmailPlaceholder: 'socio@organizacion.cl',
+      },
+    });
+    expect(screen.getByText('Elección Directiva 2026')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('socio@organizacion.cl')).toBeInTheDocument();
+    expect(screen.queryByText(/Estamento Apoderados/i)).not.toBeInTheDocument();
   });
 
   it('muestra el botón "Continuar" habilitado por defecto', () => {

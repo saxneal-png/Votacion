@@ -277,6 +277,7 @@ export default function HomePage() {
     emailSoporte: 'soporte.elecciones@eduvallediguillin.gob.cl',
     horarioAtencionSoporte: 'Lunes a Viernes de 08:30 a 17:30 hrs',
   });
+  const [loginConfig, setLoginConfig] = useState<Partial<ElectionConfig>>({});
 
   const appStateRef = useRef(appState);
   const idleResetRef = useRef<() => void>(() => undefined);
@@ -312,6 +313,33 @@ export default function HomePage() {
             emailSoporte: data.emailSoporte,
             horarioAtencionSoporte: data.horarioAtencionSoporte,
           });
+          setLoginConfig({
+            loginTitle: data.loginTitle,
+            loginSubtitle: data.loginSubtitle,
+            loginShowInstructions: data.loginShowInstructions,
+            loginInstructionsTitle: data.loginInstructionsTitle,
+            loginStep1Title: data.loginStep1Title,
+            loginStep1Detail: data.loginStep1Detail,
+            loginStep2Title: data.loginStep2Title,
+            loginStep2Detail: data.loginStep2Detail,
+            loginStep3Title: data.loginStep3Title,
+            loginStep3Detail: data.loginStep3Detail,
+            loginShowApoderadoMode: data.loginShowApoderadoMode,
+            loginShowFuncionarioMode: data.loginShowFuncionarioMode,
+            loginApoderadoTabLabel: data.loginApoderadoTabLabel,
+            loginFuncionarioTabLabel: data.loginFuncionarioTabLabel,
+            loginRutLabel: data.loginRutLabel,
+            loginStudentRutLabel: data.loginStudentRutLabel,
+            loginEmailLabel: data.loginEmailLabel,
+            loginEmailPlaceholder: data.loginEmailPlaceholder,
+            loginAllowedDomains: data.loginAllowedDomains,
+          });
+          // Si solo un modo de ingreso está habilitado, seleccionarlo automáticamente
+          if (data.loginShowApoderadoMode === false && data.loginShowFuncionarioMode !== false) {
+            setVoterType('funcionario');
+          } else if (data.loginShowFuncionarioMode === false && data.loginShowApoderadoMode !== false) {
+            setVoterType('apoderado');
+          }
         }
       } catch (err) {
         console.error('Error al obtener configuración electoral:', err);
@@ -1035,6 +1063,7 @@ export default function HomePage() {
                 isLocked={isLoginLocked}
                 errorMessage={errorMessage}
                 supportConfig={supportConfig}
+                loginConfig={loginConfig}
                 onOpenSupportModal={() => setIsSupportModalOpen(true)}
                 onVoterTypeChange={setVoterType}
                 onRutNumberChange={setRutNumber}

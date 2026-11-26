@@ -34,6 +34,36 @@ export interface ElectionConfig {
   mensajeWhatsappPlantilla?: string;
   emailSoporte?: string;
   horarioAtencionSoporte?: string;
+  // Campos de Plantilla de Correo OTP / Acreditación
+  emailOtpSubject?: string;
+  emailOtpHeaderTitle?: string;
+  emailOtpHeaderSubtitle?: string;
+  emailOtpGreeting?: string;
+  emailOtpBodyText?: string;
+  emailOtpShowCode?: boolean;
+  emailOtpShowMagicLink?: boolean;
+  emailOtpButtonText?: string;
+  emailOtpFooterText?: string;
+  // Campos de Personalización de Página de Ingreso
+  loginTitle?: string;
+  loginSubtitle?: string;
+  loginShowInstructions?: boolean;
+  loginInstructionsTitle?: string;
+  loginStep1Title?: string;
+  loginStep1Detail?: string;
+  loginStep2Title?: string;
+  loginStep2Detail?: string;
+  loginStep3Title?: string;
+  loginStep3Detail?: string;
+  loginShowApoderadoMode?: boolean;
+  loginShowFuncionarioMode?: boolean;
+  loginApoderadoTabLabel?: string;
+  loginFuncionarioTabLabel?: string;
+  loginRutLabel?: string;
+  loginStudentRutLabel?: string;
+  loginEmailLabel?: string;
+  loginEmailPlaceholder?: string;
+  loginAllowedDomains?: string;
   updatedAt?: string;
 }
 
@@ -48,6 +78,46 @@ export interface ElectionStatusCheck {
 
 export const DEFAULT_WHATSAPP_TEMPLATE =
   'Hola Mesa de Ayuda Electoral SLEP, tengo dificultades para ingresar a votar. Mi RUN es {RUT} y pertenezco al estamento {ESTAMENTO}. Solicito su asistencia.';
+
+export const DEFAULT_OTP_EMAIL_CONFIG = {
+  emailOtpSubject: 'Código de Verificación Electoral: {OTP} - {TITULO_PROCESO}',
+  emailOtpHeaderTitle: '{NOMBRE_INSTITUCION}',
+  emailOtpHeaderSubtitle: '{TITULO_PROCESO}',
+  emailOtpGreeting: 'Estimado/a {NOMBRE_VOTANTE},',
+  emailOtpBodyText:
+    'Has solicitado acceder al proceso electoral "{TITULO_PROCESO}" en el estamento {ESTAMENTO}. Utiliza el código de seguridad o el enlace directo para ingresar a tu papeleta secreta.',
+  emailOtpShowCode: true,
+  emailOtpShowMagicLink: true,
+  emailOtpButtonText: '🗳️ Ingresar a mi Papeleta de Votación',
+  emailOtpFooterText:
+    'Este código y enlace son personales, de uso único y tienen una validez de 10 minutos. Si no solicitaste este acceso, desestima este mensaje.',
+} as const;
+
+export const DEFAULT_LOGIN_CONFIG = {
+  loginTitle: 'Identificación del Votante',
+  loginSubtitle:
+    'Bienvenido(a) al Portal Electoral Institucional. Por favor, selecciona tu perfil e ingresa tus credenciales acreditadas para continuar.',
+  loginShowInstructions: true,
+  loginInstructionsTitle: 'ℹ️ Instrucciones del Proceso de Votación',
+  loginStep1Title: '1. Identificación',
+  loginStep1Detail:
+    'Selecciona tu perfil e ingresa tu RUN y correo electrónico acreditado en el padrón.',
+  loginStep2Title: '2. Verificación OTP',
+  loginStep2Detail:
+    'Recibirás en tu correo un código de 6 dígitos y/o un enlace directo seguro para autenticarte.',
+  loginStep3Title: '3. Emisión del Voto',
+  loginStep3Detail:
+    'Accede a tu papeleta, selecciona la candidatura de tu preferencia y confirma tu sufragio secreto.',
+  loginShowApoderadoMode: true,
+  loginShowFuncionarioMode: true,
+  loginApoderadoTabLabel: '👨‍👩‍👧 Estamento Apoderados (Predeterminado)',
+  loginFuncionarioTabLabel: '🏫 Funcionario / Interno',
+  loginRutLabel: 'RUT / RUN del Votante',
+  loginStudentRutLabel: 'RUN del Estudiante (Carga / Alumno)',
+  loginEmailLabel: 'Correo Electrónico',
+  loginEmailPlaceholder: 'correo@institucion.cl',
+  loginAllowedDomains: '@eduvallediguillin.gob.cl, @slepvallediguillin.gob.cl, @slep.cl',
+} as const;
 
 const DEFAULT_CONFIG: ElectionConfig = {
   id: 'config_principal',
@@ -71,6 +141,8 @@ const DEFAULT_CONFIG: ElectionConfig = {
   mensajeWhatsappPlantilla: DEFAULT_WHATSAPP_TEMPLATE,
   emailSoporte: 'soporte.elecciones@eduvallediguillin.gob.cl',
   horarioAtencionSoporte: 'Lunes a Viernes de 08:30 a 17:30 hrs',
+  ...DEFAULT_OTP_EMAIL_CONFIG,
+  ...DEFAULT_LOGIN_CONFIG,
   updatedAt: new Date().toISOString(),
 };
 
@@ -101,6 +173,138 @@ export function buildWhatsAppLink(
   text = text.replace(/{ESTAMENTO}/gi, estVal);
 
   return `https://wa.me/${cleanNumber}?text=${encodeURIComponent(text)}`;
+}
+
+export function escapeHtml(value: string): string {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+export interface RenderOtpEmailParams {
+  otp: string;
+  voterName?: string;
+  estamentoLabel?: string;
+  magicLinkUrl?: string;
+  senderEmail?: string;
+}
+
+/**
+ * Renderiza el asunto y cuerpo HTML del correo OTP/Acreditación usando la configuración vigente.
+ * Escapa HTML en todos los textos editables para prevenir inyección.
+ */
+export function renderOtpEmailTemplate(
+  config: Partial<ElectionConfig>,
+  params: RenderOtpEmailParams
+): { subject: string; html: string } {
+  const tituloProceso = config.tituloProceso?.trim() || DEFAULT_CONFIG.tituloProceso;
+  const nombreInstitucion = config.nombreInstitucion?.trim() || DEFAULT_CONFIG.nombreInstitucion || '';
+  const voterName = params.voterName?.trim() || 'Estimado(a) Votante';
+  const estamentoLabel = params.estamentoLabel?.trim() || 'Votante';
+  const otp = params.otp?.trim() || '';
+  const magicLinkUrl = params.magicLinkUrl?.trim() || '';
+
+  const replaceVars = (raw: string, htmlEscapeValues: boolean): string => {
+    const val = (s: string) => (htmlEscapeValues ? escapeHtml(s) : s);
+    return raw
+      .replace(/{OTP}/gi, val(otp))
+      .replace(/{NOMBRE_VOTANTE}/gi, val(voterName))
+      .replace(/{ESTAMENTO}/gi, val(estamentoLabel))
+      .replace(/{TITULO_PROCESO}/gi, val(tituloProceso))
+      .replace(/{NOMBRE_INSTITUCION}/gi, val(nombreInstitucion))
+      .replace(/{ENLACE_MAGICO}/gi, val(magicLinkUrl));
+  };
+
+  const subjectTpl = config.emailOtpSubject?.trim() || DEFAULT_OTP_EMAIL_CONFIG.emailOtpSubject;
+  const headerTitleTpl = config.emailOtpHeaderTitle?.trim() || DEFAULT_OTP_EMAIL_CONFIG.emailOtpHeaderTitle;
+  const headerSubtitleTpl = config.emailOtpHeaderSubtitle?.trim() || DEFAULT_OTP_EMAIL_CONFIG.emailOtpHeaderSubtitle;
+  const greetingTpl = config.emailOtpGreeting?.trim() || DEFAULT_OTP_EMAIL_CONFIG.emailOtpGreeting;
+  const bodyTextTpl = config.emailOtpBodyText?.trim() || DEFAULT_OTP_EMAIL_CONFIG.emailOtpBodyText;
+  const buttonTextTpl = config.emailOtpButtonText?.trim() || DEFAULT_OTP_EMAIL_CONFIG.emailOtpButtonText;
+  const footerTextTpl = config.emailOtpFooterText?.trim() || DEFAULT_OTP_EMAIL_CONFIG.emailOtpFooterText;
+
+  const showCode = config.emailOtpShowCode ?? DEFAULT_OTP_EMAIL_CONFIG.emailOtpShowCode;
+  const showMagicLink =
+    (config.emailOtpShowMagicLink ?? DEFAULT_OTP_EMAIL_CONFIG.emailOtpShowMagicLink) &&
+    Boolean(magicLinkUrl);
+
+  const subject = replaceVars(subjectTpl, false);
+  const headerTitle = replaceVars(escapeHtml(headerTitleTpl), true);
+  const headerSubtitle = replaceVars(escapeHtml(headerSubtitleTpl), true);
+  const greeting = replaceVars(escapeHtml(greetingTpl), true);
+  const bodyHtml = replaceVars(escapeHtml(bodyTextTpl), true).replace(/\n/g, '<br />');
+  const buttonText = replaceVars(escapeHtml(buttonTextTpl), true);
+  const footerText = replaceVars(escapeHtml(footerTextTpl), true).replace(/\n/g, '<br />');
+
+  const otpBlock = showCode && otp
+    ? `
+        <div style="text-align: center; margin: 24px 0;">
+          <p style="margin: 0 0 8px 0; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: #64748b; font-weight: bold;">Código de Verificación (OTP)</p>
+          <span style="font-size: 32px; font-weight: bold; letter-spacing: 6px; color: #0b5294; background-color: #f0f4f9; padding: 12px 26px; border-radius: 10px; border: 1px dashed #0b5294; display: inline-block;">
+            ${escapeHtml(otp)}
+          </span>
+        </div>`
+    : '';
+
+  const magicLinkBlock = showMagicLink
+    ? `
+        <div style="text-align: center; margin: 24px 0;">
+          <a href="${escapeHtml(magicLinkUrl)}" style="display: inline-block; background-color: #059669; color: #ffffff; text-decoration: none; padding: 14px 28px; border-radius: 12px; font-weight: bold; font-size: 15px; box-shadow: 0 4px 14px rgba(5,150,105,0.35);">${buttonText}</a>
+        </div>`
+    : '';
+
+  const senderFooter = params.senderEmail
+    ? `<p style="margin: 8px 0 0 0; font-size: 11px; color: #94a3b8;">Remitente institucional: ${escapeHtml(params.senderEmail)}</p>`
+    : '';
+
+  const html = `
+    <div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 16px; overflow: hidden; background-color: #ffffff;">
+      <div style="background-color: #0b5294; color: #ffffff; padding: 24px; text-align: center;">
+        <h1 style="margin: 0; font-size: 20px; font-weight: 800;">${headerTitle}</h1>
+        <p style="margin: 6px 0 0 0; font-size: 13px; color: #bfdbfe;">${headerSubtitle}</p>
+      </div>
+
+      <div style="padding: 24px; color: #334155; line-height: 1.6;">
+        <p style="font-size: 15px; font-weight: bold; margin-top: 0;">${greeting}</p>
+        <p style="font-size: 14px; margin: 12px 0;">${bodyHtml}</p>
+        ${otpBlock}
+        ${magicLinkBlock}
+      </div>
+
+      <div style="background-color: #f1f5f9; padding: 16px 24px; text-align: center; font-size: 12px; color: #64748b; border-top: 1px solid #e2e8f0;">
+        <p style="margin: 0;">${footerText}</p>
+        ${senderFooter}
+      </div>
+    </div>
+  `;
+
+  return { subject, html };
+}
+
+export function parseAllowedDomains(allowedDomainsRaw?: string): string[] {
+  const raw = (allowedDomainsRaw ?? DEFAULT_LOGIN_CONFIG.loginAllowedDomains).trim();
+  if (!raw || raw === '*') return [];
+  return raw
+    .split(/[\s,;]+/)
+    .map((d) => d.trim().toLowerCase())
+    .filter(Boolean)
+    .map((d) => (d.startsWith('@') ? d : `@${d}`));
+}
+
+export function isEmailDomainAllowed(email: string, allowedDomainsRaw?: string): boolean {
+  const cleanEmail = email.trim().toLowerCase();
+  if (!cleanEmail || !cleanEmail.includes('@')) return false;
+
+  const raw = (allowedDomainsRaw ?? '').trim();
+  if (raw === '*') return true;
+
+  const domains = parseAllowedDomains(allowedDomainsRaw);
+  if (domains.length === 0) return true;
+
+  return domains.some((domain) => cleanEmail.endsWith(domain));
 }
 
 /**
@@ -176,6 +380,118 @@ export async function getElectionConfigAsync(): Promise<ElectionConfig> {
         data.horario_atencion_soporte !== undefined && data.horario_atencion_soporte !== null
           ? String(data.horario_atencion_soporte)
           : (electionConfigStore.horarioAtencionSoporte ?? DEFAULT_CONFIG.horarioAtencionSoporte),
+      emailOtpSubject:
+        data.email_otp_subject != null
+          ? String(data.email_otp_subject)
+          : (electionConfigStore.emailOtpSubject ?? DEFAULT_OTP_EMAIL_CONFIG.emailOtpSubject),
+      emailOtpHeaderTitle:
+        data.email_otp_header_title != null
+          ? String(data.email_otp_header_title)
+          : (electionConfigStore.emailOtpHeaderTitle ?? DEFAULT_OTP_EMAIL_CONFIG.emailOtpHeaderTitle),
+      emailOtpHeaderSubtitle:
+        data.email_otp_header_subtitle != null
+          ? String(data.email_otp_header_subtitle)
+          : (electionConfigStore.emailOtpHeaderSubtitle ?? DEFAULT_OTP_EMAIL_CONFIG.emailOtpHeaderSubtitle),
+      emailOtpGreeting:
+        data.email_otp_greeting != null
+          ? String(data.email_otp_greeting)
+          : (electionConfigStore.emailOtpGreeting ?? DEFAULT_OTP_EMAIL_CONFIG.emailOtpGreeting),
+      emailOtpBodyText:
+        data.email_otp_body_text != null
+          ? String(data.email_otp_body_text)
+          : (electionConfigStore.emailOtpBodyText ?? DEFAULT_OTP_EMAIL_CONFIG.emailOtpBodyText),
+      emailOtpShowCode:
+        data.email_otp_show_code != null
+          ? Boolean(data.email_otp_show_code)
+          : (electionConfigStore.emailOtpShowCode ?? DEFAULT_OTP_EMAIL_CONFIG.emailOtpShowCode),
+      emailOtpShowMagicLink:
+        data.email_otp_show_magic_link != null
+          ? Boolean(data.email_otp_show_magic_link)
+          : (electionConfigStore.emailOtpShowMagicLink ?? DEFAULT_OTP_EMAIL_CONFIG.emailOtpShowMagicLink),
+      emailOtpButtonText:
+        data.email_otp_button_text != null
+          ? String(data.email_otp_button_text)
+          : (electionConfigStore.emailOtpButtonText ?? DEFAULT_OTP_EMAIL_CONFIG.emailOtpButtonText),
+      emailOtpFooterText:
+        data.email_otp_footer_text != null
+          ? String(data.email_otp_footer_text)
+          : (electionConfigStore.emailOtpFooterText ?? DEFAULT_OTP_EMAIL_CONFIG.emailOtpFooterText),
+      loginTitle:
+        data.login_title != null
+          ? String(data.login_title)
+          : (electionConfigStore.loginTitle ?? DEFAULT_LOGIN_CONFIG.loginTitle),
+      loginSubtitle:
+        data.login_subtitle != null
+          ? String(data.login_subtitle)
+          : (electionConfigStore.loginSubtitle ?? DEFAULT_LOGIN_CONFIG.loginSubtitle),
+      loginShowInstructions:
+        data.login_show_instructions != null
+          ? Boolean(data.login_show_instructions)
+          : (electionConfigStore.loginShowInstructions ?? DEFAULT_LOGIN_CONFIG.loginShowInstructions),
+      loginInstructionsTitle:
+        data.login_instructions_title != null
+          ? String(data.login_instructions_title)
+          : (electionConfigStore.loginInstructionsTitle ?? DEFAULT_LOGIN_CONFIG.loginInstructionsTitle),
+      loginStep1Title:
+        data.login_step1_title != null
+          ? String(data.login_step1_title)
+          : (electionConfigStore.loginStep1Title ?? DEFAULT_LOGIN_CONFIG.loginStep1Title),
+      loginStep1Detail:
+        data.login_step1_detail != null
+          ? String(data.login_step1_detail)
+          : (electionConfigStore.loginStep1Detail ?? DEFAULT_LOGIN_CONFIG.loginStep1Detail),
+      loginStep2Title:
+        data.login_step2_title != null
+          ? String(data.login_step2_title)
+          : (electionConfigStore.loginStep2Title ?? DEFAULT_LOGIN_CONFIG.loginStep2Title),
+      loginStep2Detail:
+        data.login_step2_detail != null
+          ? String(data.login_step2_detail)
+          : (electionConfigStore.loginStep2Detail ?? DEFAULT_LOGIN_CONFIG.loginStep2Detail),
+      loginStep3Title:
+        data.login_step3_title != null
+          ? String(data.login_step3_title)
+          : (electionConfigStore.loginStep3Title ?? DEFAULT_LOGIN_CONFIG.loginStep3Title),
+      loginStep3Detail:
+        data.login_step3_detail != null
+          ? String(data.login_step3_detail)
+          : (electionConfigStore.loginStep3Detail ?? DEFAULT_LOGIN_CONFIG.loginStep3Detail),
+      loginShowApoderadoMode:
+        data.login_show_apoderado_mode != null
+          ? Boolean(data.login_show_apoderado_mode)
+          : (electionConfigStore.loginShowApoderadoMode ?? DEFAULT_LOGIN_CONFIG.loginShowApoderadoMode),
+      loginShowFuncionarioMode:
+        data.login_show_funcionario_mode != null
+          ? Boolean(data.login_show_funcionario_mode)
+          : (electionConfigStore.loginShowFuncionarioMode ?? DEFAULT_LOGIN_CONFIG.loginShowFuncionarioMode),
+      loginApoderadoTabLabel:
+        data.login_apoderado_tab_label != null
+          ? String(data.login_apoderado_tab_label)
+          : (electionConfigStore.loginApoderadoTabLabel ?? DEFAULT_LOGIN_CONFIG.loginApoderadoTabLabel),
+      loginFuncionarioTabLabel:
+        data.login_funcionario_tab_label != null
+          ? String(data.login_funcionario_tab_label)
+          : (electionConfigStore.loginFuncionarioTabLabel ?? DEFAULT_LOGIN_CONFIG.loginFuncionarioTabLabel),
+      loginRutLabel:
+        data.login_rut_label != null
+          ? String(data.login_rut_label)
+          : (electionConfigStore.loginRutLabel ?? DEFAULT_LOGIN_CONFIG.loginRutLabel),
+      loginStudentRutLabel:
+        data.login_student_rut_label != null
+          ? String(data.login_student_rut_label)
+          : (electionConfigStore.loginStudentRutLabel ?? DEFAULT_LOGIN_CONFIG.loginStudentRutLabel),
+      loginEmailLabel:
+        data.login_email_label != null
+          ? String(data.login_email_label)
+          : (electionConfigStore.loginEmailLabel ?? DEFAULT_LOGIN_CONFIG.loginEmailLabel),
+      loginEmailPlaceholder:
+        data.login_email_placeholder != null
+          ? String(data.login_email_placeholder)
+          : (electionConfigStore.loginEmailPlaceholder ?? DEFAULT_LOGIN_CONFIG.loginEmailPlaceholder),
+      loginAllowedDomains:
+        data.login_allowed_domains != null
+          ? String(data.login_allowed_domains)
+          : (electionConfigStore.loginAllowedDomains ?? DEFAULT_LOGIN_CONFIG.loginAllowedDomains),
       updatedAt: String(data.updated_at ?? new Date().toISOString()),
     };
 
@@ -222,6 +538,34 @@ export async function saveElectionConfigAsync(config: Partial<ElectionConfig>): 
       if (updated.mensajeWhatsappPlantilla !== undefined) payload.mensaje_whatsapp_plantilla = updated.mensajeWhatsappPlantilla;
       if (updated.emailSoporte !== undefined) payload.email_soporte = updated.emailSoporte;
       if (updated.horarioAtencionSoporte !== undefined) payload.horario_atencion_soporte = updated.horarioAtencionSoporte;
+      if (updated.emailOtpSubject !== undefined) payload.email_otp_subject = updated.emailOtpSubject;
+      if (updated.emailOtpHeaderTitle !== undefined) payload.email_otp_header_title = updated.emailOtpHeaderTitle;
+      if (updated.emailOtpHeaderSubtitle !== undefined) payload.email_otp_header_subtitle = updated.emailOtpHeaderSubtitle;
+      if (updated.emailOtpGreeting !== undefined) payload.email_otp_greeting = updated.emailOtpGreeting;
+      if (updated.emailOtpBodyText !== undefined) payload.email_otp_body_text = updated.emailOtpBodyText;
+      if (updated.emailOtpShowCode !== undefined) payload.email_otp_show_code = updated.emailOtpShowCode;
+      if (updated.emailOtpShowMagicLink !== undefined) payload.email_otp_show_magic_link = updated.emailOtpShowMagicLink;
+      if (updated.emailOtpButtonText !== undefined) payload.email_otp_button_text = updated.emailOtpButtonText;
+      if (updated.emailOtpFooterText !== undefined) payload.email_otp_footer_text = updated.emailOtpFooterText;
+      if (updated.loginTitle !== undefined) payload.login_title = updated.loginTitle;
+      if (updated.loginSubtitle !== undefined) payload.login_subtitle = updated.loginSubtitle;
+      if (updated.loginShowInstructions !== undefined) payload.login_show_instructions = updated.loginShowInstructions;
+      if (updated.loginInstructionsTitle !== undefined) payload.login_instructions_title = updated.loginInstructionsTitle;
+      if (updated.loginStep1Title !== undefined) payload.login_step1_title = updated.loginStep1Title;
+      if (updated.loginStep1Detail !== undefined) payload.login_step1_detail = updated.loginStep1Detail;
+      if (updated.loginStep2Title !== undefined) payload.login_step2_title = updated.loginStep2Title;
+      if (updated.loginStep2Detail !== undefined) payload.login_step2_detail = updated.loginStep2Detail;
+      if (updated.loginStep3Title !== undefined) payload.login_step3_title = updated.loginStep3Title;
+      if (updated.loginStep3Detail !== undefined) payload.login_step3_detail = updated.loginStep3Detail;
+      if (updated.loginShowApoderadoMode !== undefined) payload.login_show_apoderado_mode = updated.loginShowApoderadoMode;
+      if (updated.loginShowFuncionarioMode !== undefined) payload.login_show_funcionario_mode = updated.loginShowFuncionarioMode;
+      if (updated.loginApoderadoTabLabel !== undefined) payload.login_apoderado_tab_label = updated.loginApoderadoTabLabel;
+      if (updated.loginFuncionarioTabLabel !== undefined) payload.login_funcionario_tab_label = updated.loginFuncionarioTabLabel;
+      if (updated.loginRutLabel !== undefined) payload.login_rut_label = updated.loginRutLabel;
+      if (updated.loginStudentRutLabel !== undefined) payload.login_student_rut_label = updated.loginStudentRutLabel;
+      if (updated.loginEmailLabel !== undefined) payload.login_email_label = updated.loginEmailLabel;
+      if (updated.loginEmailPlaceholder !== undefined) payload.login_email_placeholder = updated.loginEmailPlaceholder;
+      if (updated.loginAllowedDomains !== undefined) payload.login_allowed_domains = updated.loginAllowedDomains;
 
       const { error } = await supabaseAdmin
         .from('bd_configuracion_eleccion')

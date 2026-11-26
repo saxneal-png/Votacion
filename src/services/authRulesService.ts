@@ -1,5 +1,11 @@
 import { cleanAndValidateRUT } from '@/lib/rut-validator';
 import {
+  DEFAULT_LOGIN_CONFIG,
+  getElectionConfigAsync,
+  isEmailDomainAllowed,
+  parseAllowedDomains,
+} from '@/lib/election-config-store';
+import {
   EstamentoDecreto102,
   findAllVoterRecordsAsync,
   findApoderadoRecordsAsync,
@@ -192,16 +198,15 @@ export function validateFuncionarioAuth(rutFuncionario: string, email: string): 
     throw new Error('Debes ingresar tu correo electrónico institucional.');
   }
 
-  // Restricción de dominio para funcionarios
+  // Restricción de dominio configurable para funcionarios / internos
+  const allowedDomains = DEFAULT_LOGIN_CONFIG.loginAllowedDomains;
   const isDomainValid =
-    cleanEmail.endsWith('@eduvallediguillin.gob.cl') ||
-    cleanEmail.endsWith('@slepvallediguillin.gob.cl') ||
-    cleanEmail.endsWith('@slep.cl') ||
-    cleanEmail.includes('slep');
+    isEmailDomainAllowed(cleanEmail, allowedDomains) || cleanEmail.includes('slep');
 
   if (!isDomainValid) {
+    const domainsList = parseAllowedDomains(allowedDomains).join(', ');
     throw new Error(
-      'Los funcionarios del SLEP deben ingresar obligatoriamente con su casilla institucional (@eduvallediguillin.gob.cl).',
+      `Los funcionarios del SLEP deben ingresar obligatoriamente con su casilla institucional (${domainsList || '@eduvallediguillin.gob.cl'}).`,
     );
   }
 
@@ -247,16 +252,15 @@ export async function validateFuncionarioAuthAsync(
     throw new Error('Debes ingresar tu correo electrónico institucional.');
   }
 
-  // Restricción de dominio para funcionarios
+  // Restricción de dominio configurable para funcionarios / internos
+  const allowedDomains = DEFAULT_LOGIN_CONFIG.loginAllowedDomains;
   const isDomainValid =
-    cleanEmail.endsWith('@eduvallediguillin.gob.cl') ||
-    cleanEmail.endsWith('@slepvallediguillin.gob.cl') ||
-    cleanEmail.endsWith('@slep.cl') ||
-    cleanEmail.includes('slep');
+    isEmailDomainAllowed(cleanEmail, allowedDomains) || cleanEmail.includes('slep');
 
   if (!isDomainValid) {
+    const domainsList = parseAllowedDomains(allowedDomains).join(', ');
     throw new Error(
-      'Los funcionarios del SLEP deben ingresar obligatoriamente con su casilla institucional (@eduvallediguillin.gob.cl).',
+      `Los funcionarios del SLEP deben ingresar obligatoriamente con su casilla institucional (${domainsList || '@eduvallediguillin.gob.cl'}).`,
     );
   }
 

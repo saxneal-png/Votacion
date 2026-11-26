@@ -1,6 +1,11 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { HelpTooltip } from '@/components/HelpTooltip';
-import { buildWhatsAppLink, DEFAULT_WHATSAPP_TEMPLATE, type ElectionConfig } from '@/lib/election-config-store';
+import {
+  buildWhatsAppLink,
+  DEFAULT_LOGIN_CONFIG,
+  parseAllowedDomains,
+  type ElectionConfig,
+} from '@/lib/election-config-store';
 
 function validateRut(number: string, verifier: string): 'valid' | 'invalid' | 'empty' {
   if (!number || !verifier) return 'empty';
@@ -49,6 +54,7 @@ interface LoginViewProps {
   isLocked: boolean;
   errorMessage: string | null;
   supportConfig?: Partial<ElectionConfig> | null;
+  loginConfig?: Partial<ElectionConfig> | null;
   onOpenSupportModal?: () => void;
   onVoterTypeChange: (type: VoterType) => void;
   onRutNumberChange: (value: string) => void;
@@ -71,6 +77,7 @@ export function LoginView({
   isLocked,
   errorMessage,
   supportConfig,
+  loginConfig,
   onOpenSupportModal,
   onVoterTypeChange,
   onRutNumberChange,
@@ -88,92 +95,109 @@ export function LoginView({
   const trimmedEmail = email.trim();
   const hasValidEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail);
 
+  const lc = { ...DEFAULT_LOGIN_CONFIG, ...loginConfig };
+  const showApoderado = lc.loginShowApoderadoMode !== false;
+  const showFuncionario = lc.loginShowFuncionarioMode !== false;
+  const showModeTabs = showApoderado && showFuncionario;
+  const allowedDomains = parseAllowedDomains(lc.loginAllowedDomains);
+  const primaryDomain = allowedDomains[0] || '';
+
   return (
     <section className="rounded-2xl bg-white/95 backdrop-blur-sm border border-slate-900/10 text-[#0c2138] p-5">
       <div className="mb-4 pb-4 border-b border-slate-900/[0.08]">
         <div className="flex items-start justify-between gap-3">
           <h1 className="mt-0 mb-0 font-serif text-[clamp(20px,2.6vw,28px)] text-[#0c2138] leading-none tracking-tight">
-            {isSimplifiedMode ? 'Ingresa tus datos' : 'Identificación del Votante'}
+            {isSimplifiedMode ? 'Ingresa tus datos' : (lc.loginTitle || DEFAULT_LOGIN_CONFIG.loginTitle)}
           </h1>
           <HelpTooltip
-            title="Identificación por Estamento"
-            description="Si eres Funcionario (Directivo, Docente, Asistente) ingresa tu RUN y correo. Si eres Apoderado, se requiere además el RUN del estudiante."
+            title="Identificación de Votante"
+            description={
+              showModeTabs
+                ? 'Selecciona tu perfil de votante e ingresa tu RUN y correo electrónico acreditado en el padrón.'
+                : 'Ingresa tu RUN y correo electrónico acreditado en el padrón electoral.'
+            }
           />
         </div>
         <p className="mt-2 mb-0 text-sm text-slate-500 font-sans leading-relaxed">
           {isSimplifiedMode
-            ? 'Ingresa tu RUN de Apoderado, el RUN de tu estudiante y tu correo.'
-            : 'Bienvenido(a) al Portal Electoral Institucional. Por favor, selecciona tu estamento e ingresa tus credenciales acreditadas para continuar.'}
+            ? 'Ingresa tu RUN y tu correo electrónico acreditado para recibir tu código de acceso.'
+            : (lc.loginSubtitle || DEFAULT_LOGIN_CONFIG.loginSubtitle)}
         </p>
       </div>
 
       {/* Guía Clara del Proceso de Votación */}
-      <div className="mb-5 p-4 rounded-2xl bg-gradient-to-r from-blue-50/90 via-sky-50/70 to-blue-50/90 border border-blue-200/80 shadow-xs">
-        <h2 className="text-xs font-bold font-sans uppercase tracking-wider text-[#0b5294] flex items-center gap-2 mb-2.5">
-          <span>ℹ️ Instrucciones del Proceso de Votación</span>
-        </h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <div className="flex items-start gap-2.5 p-2.5 rounded-xl bg-white/90 border border-blue-100 shadow-2xs">
-            <span className="flex items-center justify-center shrink-0 w-6 h-6 rounded-full bg-[#0b5294] text-white font-sans text-xs font-bold">1</span>
-            <div>
-              <p className="text-xs font-bold font-sans text-slate-800 m-0">1. Identificación</p>
-              <p className="text-[11px] text-slate-600 font-sans m-0 mt-0.5 leading-snug">
-                Selecciona tu estamento e ingresa tu RUN y correo. Si eres apoderado, suma el RUN del estudiante.
-              </p>
+      {lc.loginShowInstructions !== false ? (
+        <div className="mb-5 p-4 rounded-2xl bg-gradient-to-r from-blue-50/90 via-sky-50/70 to-blue-50/90 border border-blue-200/80 shadow-xs">
+          <h2 className="text-xs font-bold font-sans uppercase tracking-wider text-[#0b5294] flex items-center gap-2 mb-2.5">
+            <span>{lc.loginInstructionsTitle || DEFAULT_LOGIN_CONFIG.loginInstructionsTitle}</span>
+          </h2>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div className="flex items-start gap-2.5 p-2.5 rounded-xl bg-white/90 border border-blue-100 shadow-2xs">
+              <span className="flex items-center justify-center shrink-0 w-6 h-6 rounded-full bg-[#0b5294] text-white font-sans text-xs font-bold">1</span>
+              <div>
+                <p className="text-xs font-bold font-sans text-slate-800 m-0">{lc.loginStep1Title || DEFAULT_LOGIN_CONFIG.loginStep1Title}</p>
+                <p className="text-[11px] text-slate-600 font-sans m-0 mt-0.5 leading-snug">
+                  {lc.loginStep1Detail || DEFAULT_LOGIN_CONFIG.loginStep1Detail}
+                </p>
+              </div>
             </div>
-          </div>
-          <div className="flex items-start gap-2.5 p-2.5 rounded-xl bg-white/90 border border-blue-100 shadow-2xs">
-            <span className="flex items-center justify-center shrink-0 w-6 h-6 rounded-full bg-[#0b5294] text-white font-sans text-xs font-bold">2</span>
-            <div>
-              <p className="text-xs font-bold font-sans text-slate-800 m-0">2. Enlace Mágico</p>
-              <p className="text-[11px] text-slate-600 font-sans m-0 mt-0.5 leading-snug">
-                Recibirás en tu correo un enlace directo seguro para autenticarte sin contraseña.
-              </p>
+            <div className="flex items-start gap-2.5 p-2.5 rounded-xl bg-white/90 border border-blue-100 shadow-2xs">
+              <span className="flex items-center justify-center shrink-0 w-6 h-6 rounded-full bg-[#0b5294] text-white font-sans text-xs font-bold">2</span>
+              <div>
+                <p className="text-xs font-bold font-sans text-slate-800 m-0">{lc.loginStep2Title || DEFAULT_LOGIN_CONFIG.loginStep2Title}</p>
+                <p className="text-[11px] text-slate-600 font-sans m-0 mt-0.5 leading-snug">
+                  {lc.loginStep2Detail || DEFAULT_LOGIN_CONFIG.loginStep2Detail}
+                </p>
+              </div>
             </div>
-          </div>
-          <div className="flex items-start gap-2.5 p-2.5 rounded-xl bg-white/90 border border-blue-100 shadow-2xs">
-            <span className="flex items-center justify-center shrink-0 w-6 h-6 rounded-full bg-[#0b5294] text-white font-sans text-xs font-bold">3</span>
-            <div>
-              <p className="text-xs font-bold font-sans text-slate-800 m-0">3. Emisión del Voto</p>
-              <p className="text-[11px] text-slate-600 font-sans m-0 mt-0.5 leading-snug">
-                Accede a tu papeleta, selecciona la candidatura de tu preferencia y confirma tu sufragio secreto.
-              </p>
+            <div className="flex items-start gap-2.5 p-2.5 rounded-xl bg-white/90 border border-blue-100 shadow-2xs">
+              <span className="flex items-center justify-center shrink-0 w-6 h-6 rounded-full bg-[#0b5294] text-white font-sans text-xs font-bold">3</span>
+              <div>
+                <p className="text-xs font-bold font-sans text-slate-800 m-0">{lc.loginStep3Title || DEFAULT_LOGIN_CONFIG.loginStep3Title}</p>
+                <p className="text-[11px] text-slate-600 font-sans m-0 mt-0.5 leading-snug">
+                  {lc.loginStep3Detail || DEFAULT_LOGIN_CONFIG.loginStep3Detail}
+                </p>
+              </div>
             </div>
           </div>
         </div>
-      </div>
+      ) : null}
 
-      {/* Selector de Tipo de Votante */}
-      <div className="mb-4 flex p-1 bg-slate-100/90 rounded-xl border border-slate-900/[0.06]">
-        <button
-          type="button"
-          className={`flex-1 py-2.5 px-3 rounded-lg text-xs font-bold font-sans transition-all duration-150 ${
-            voterType === 'apoderado'
-              ? 'bg-[#0b5294] text-white shadow-md ring-1 ring-[#0b5294]/30'
-              : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
-          }`}
-          onClick={() => onVoterTypeChange('apoderado')}
-        >
-          👨‍👩‍👧 Estamento Apoderados (Predeterminado)
-        </button>
-        <button
-          type="button"
-          className={`flex-1 py-2.5 px-3 rounded-lg text-xs font-bold font-sans transition-all duration-150 ${
-            voterType === 'funcionario'
-              ? 'bg-[#0b5294] text-white shadow-md ring-1 ring-[#0b5294]/30'
-              : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
-          }`}
-          onClick={() => onVoterTypeChange('funcionario')}
-        >
-          🏫 Funcionario SLEP (@eduvallediguillin.gob.cl)
-        </button>
-      </div>
+      {/* Selector de Tipo de Votante (solo visible si ambos modos están habilitados) */}
+      {showModeTabs ? (
+        <div className="mb-4 flex p-1 bg-slate-100/90 rounded-xl border border-slate-900/[0.06]">
+          <button
+            type="button"
+            className={`flex-1 py-2.5 px-3 rounded-lg text-xs font-bold font-sans transition-all duration-150 ${
+              voterType === 'apoderado'
+                ? 'bg-[#0b5294] text-white shadow-md ring-1 ring-[#0b5294]/30'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
+            }`}
+            onClick={() => onVoterTypeChange('apoderado')}
+          >
+            {lc.loginApoderadoTabLabel || DEFAULT_LOGIN_CONFIG.loginApoderadoTabLabel}
+          </button>
+          <button
+            type="button"
+            className={`flex-1 py-2.5 px-3 rounded-lg text-xs font-bold font-sans transition-all duration-150 ${
+              voterType === 'funcionario'
+                ? 'bg-[#0b5294] text-white shadow-md ring-1 ring-[#0b5294]/30'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
+            }`}
+            onClick={() => onVoterTypeChange('funcionario')}
+          >
+            {lc.loginFuncionarioTabLabel || DEFAULT_LOGIN_CONFIG.loginFuncionarioTabLabel}
+          </button>
+        </div>
+      ) : null}
 
       <form className="grid gap-3.5" onSubmit={onSubmit} autoComplete="off">
         {/* RUT Principal (Votante o Apoderado) */}
         <fieldset className="grid gap-2 min-w-0">
           <legend className={labelClass}>
-            {voterType === 'apoderado' ? 'RUN del Apoderado' : 'RUT / RUN Funcionario'}
+            {voterType === 'apoderado'
+              ? (lc.loginRutLabel || 'RUN del Apoderado')
+              : (lc.loginRutLabel || 'RUT / RUN del Votante')}
           </legend>
           <div className="grid grid-cols-[1fr_auto_88px] gap-2 items-center">
             <label className="sr-only" htmlFor="rut-number">
@@ -245,9 +269,11 @@ export function LoginView({
         </fieldset>
 
         {/* RUN del Estudiante / Alumno (Solo para Apoderados) */}
-        {voterType === 'apoderado' ? (
+        {voterType === 'apoderado' && showApoderado ? (
           <fieldset className="grid gap-2 min-w-0 p-3 rounded-xl bg-amber-50/70 border border-amber-200/80">
-            <legend className={`${labelClass} text-amber-900`}>RUN del Estudiante (Carga / Alumno)</legend>
+            <legend className={`${labelClass} text-amber-900`}>
+              {lc.loginStudentRutLabel || DEFAULT_LOGIN_CONFIG.loginStudentRutLabel}
+            </legend>
             <div className="grid grid-cols-[1fr_auto_88px] gap-2 items-center">
               <label className="sr-only" htmlFor="student-rut-number">
                 Número de RUT del estudiante
@@ -321,11 +347,11 @@ export function LoginView({
         <label className="grid gap-2">
           <div className="flex justify-between items-center">
             <span className={labelClass} id="email-label">
-              {voterType === 'funcionario' ? 'Correo Institucional SLEP' : 'Correo electrónico de contacto'}
+              {lc.loginEmailLabel || DEFAULT_LOGIN_CONFIG.loginEmailLabel}
             </span>
-            {voterType === 'funcionario' ? (
+            {voterType === 'funcionario' && primaryDomain ? (
               <span className="text-[10px] font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
-                @eduvallediguillin.gob.cl
+                {primaryDomain}
               </span>
             ) : null}
           </div>
@@ -337,7 +363,11 @@ export function LoginView({
             autoCorrect="off"
             spellCheck={false}
             maxLength={254}
-            placeholder={voterType === 'apoderado' ? 'apoderado@gmail.com' : 'docente@eduvallediguillin.gob.cl'}
+            placeholder={
+              voterType === 'apoderado'
+                ? 'usuario@gmail.com'
+                : (lc.loginEmailPlaceholder || (primaryDomain ? `usuario${primaryDomain}` : 'correo@institucion.cl'))
+            }
             value={email}
             aria-describedby={errorId}
             onChange={(event) => onEmailChange(event.target.value)}

@@ -6,6 +6,7 @@ import { getCandidatosAsync } from '@/lib/candidates-store';
 import { getPadronRecordsAsync } from '@/lib/padron-store';
 import { getVotingRecordsAsync } from '@/lib/voting-record-store';
 import { getVoteTalliesAsync } from '@/lib/metrics-store';
+import { getElectionConfigAsync } from '@/lib/election-config-store';
 
 export async function POST(request: NextRequest) {
   const cookieStore = await cookies();
@@ -54,8 +55,12 @@ export async function POST(request: NextRequest) {
       timeStyle: 'medium',
     });
 
+    const electionConfig = await getElectionConfigAsync();
+    const procesoTitulo = electionConfig.tituloProceso || 'Proceso Electoral';
+    const institucionNombre = electionConfig.nombreInstitucion || slepId.toUpperCase();
+
     // 2. Plantilla local por defecto
-    let resumenActaIa = `ACTA OFICIAL DE ESCRUTINIO Y CIERRE DE PROCESO ELECTORAL CONSEJO LOCAL ${slepId.toUpperCase()}
+    let resumenActaIa = `ACTA OFICIAL DE ESCRUTINIO Y CIERRE DE PROCESO ELECTORAL — ${procesoTitulo.toUpperCase()} (${institucionNombre})
 Fecha y Hora de Cierre: ${fechaCierre}
 Participación Total: ${totalVotesCast} votos emitidos de un padrón de ${totalPadron} electores habilitados (${porcentajeParticipacion}% de participación).
 Resumen de Resultados por Candidatura:
@@ -68,8 +73,8 @@ Proceso verificado con firmas de auditoría y sello de tiempo de la plataforma d
     const geminiApiKey = process.env.GEMINI_API_KEY;
     if (generateAiSummary && geminiApiKey) {
       try {
-        const prompt = `Actúa como un Ministro de Fe y Secretario General de un Servicio Local de Educación Pública (SLEP) en Chile.
-Redacta una Acta Oficial y Formal de Escrutinio Administrativo de Cierre de Elección para el Consejo Local.
+        const prompt = `Actúa como un Ministro de Fe y Secretario General de la institución "${institucionNombre}".
+Redacta una Acta Oficial y Formal de Escrutinio Administrativo de Cierre de Elección para el proceso "${procesoTitulo}".
 
 Datos del Proceso:
 - Fecha/Hora de Cierre: ${fechaCierre}

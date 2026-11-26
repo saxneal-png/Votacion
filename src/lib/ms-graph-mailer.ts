@@ -1,12 +1,15 @@
 /**
  * Servicio de envío de correos utilizando Microsoft Graph API (Microsoft 365 A5)
- * Servicio Local de Educación Pública
  */
+
+import { getElectionConfigAsync, renderOtpEmailTemplate } from '@/lib/election-config-store';
 
 interface SendOtpEmailParams {
   toEmail: string;
   userName?: string;
   otpCode: string;
+  estamentoLabel?: string;
+  magicLinkUrl?: string;
 }
 
 interface AzureTokenResponse {
@@ -68,44 +71,26 @@ export async function sendOtpEmail({
   toEmail,
   userName = 'Estimado(a) Votante',
   otpCode,
+  estamentoLabel,
+  magicLinkUrl,
 }: SendOtpEmailParams): Promise<{ success: boolean; messageId?: string }> {
   const senderEmail =
     process.env.MS_GRAPH_SENDER_EMAIL || 'dionicio.flores@slepvallediguillin.gob.cl';
 
-  // 1. Obtener Access Token de Azure AD
-  const token = await getAzureAccessToken();
+  // 1. Obtener Access Token de Azure AD y configuración electoral vigente
+  const [token, electionConfig] = await Promise.all([
+    getAzureAccessToken(),
+    getElectionConfigAsync(),
+  ]);
 
-  // 2. Construir plantilla de correo HTML institucional
-  const htmlBody = `
-    <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e0e0e0; border-radius: 8px; background-color: #ffffff;">
-      <div style="text-align: center; padding-bottom: 20px; border-bottom: 2px solid #0056b3;">
-        <h2 style="color: #0056b3; margin: 0;">Portal de Votación Digital</h2>
-        <p style="color: #666666; font-size: 14px; margin-top: 4px;">Servicio Local de Educación Pública</p>
-      </div>
-
-      <div style="padding: 24px 0;">
-        <p style="font-size: 16px; color: #333333;">Hola <strong>${userName}</strong>,</p>
-        <p style="font-size: 15px; color: #555555; line-height: 1.5;">
-          Has solicitado ingresar al Portal de Votación Digital. Utiliza el siguiente código de seguridad (OTP) para verificar tu identidad:
-        </p>
-
-        <div style="text-align: center; margin: 32px 0;">
-          <span style="font-size: 36px; font-weight: bold; letter-spacing: 6px; color: #0056b3; background-color: #f0f4f9; padding: 12px 28px; border-radius: 8px; border: 1px dashed #0056b3; display: inline-block;">
-            ${otpCode}
-          </span>
-        </div>
-
-        <p style="font-size: 13px; color: #777777; line-height: 1.4;">
-          ⚠️ Este código es confidencial, de uso único y tiene una validez de <strong>10 minutos</strong>. Si no has solicitado este acceso, por favor desestima este mensaje.
-        </p>
-      </div>
-
-      <div style="border-top: 1px solid #e0e0e0; padding-top: 16px; text-align: center; font-size: 12px; color: #999999;">
-        <p>Este correo ha sido generado automáticamente por la plataforma de Votación Digital del SLEP.</p>
-        <p>Remitente institucional: ${senderEmail}</p>
-      </div>
-    </div>
-  `;
+  // 2. Construir plantilla de correo HTML institucional configurable
+  const { subject, html: htmlBody } = renderOtpEmailTemplate(electionConfig, {
+    otp: otpCode,
+    voterName: userName,
+    estamentoLabel,
+    magicLinkUrl,
+    senderEmail,
+  });
 
   // 3. Enviar correo a través de Microsoft Graph API /users/{id|userPrincipalName}/sendMail
   const sendMailUrl = `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(
@@ -114,7 +99,7 @@ export async function sendOtpEmail({
 
   const mailPayload = {
     message: {
-      subject: `Código de Verificación: ${otpCode} - Portal de Votación SLEP`,
+      subject,
       body: {
         contentType: 'HTML',
         content: htmlBody,

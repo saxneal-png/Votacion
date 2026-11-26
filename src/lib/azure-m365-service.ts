@@ -1,3 +1,4 @@
+import { getElectionConfigAsync, renderOtpEmailTemplate } from '@/lib/election-config-store';
 import { consumeTempToken } from '@/services/authRulesService';
 
 export interface AzureM365Config {
@@ -257,32 +258,16 @@ export async function sendOtpEmailViaGraph(params: {
   const cfg = azureConfig;
   const baseUrl =
     process.env.NEXT_PUBLIC_APP_URL || 'https://votacion-amber.vercel.app';
+  const electionConfig = await getElectionConfigAsync();
+  const magicLinkUrl = `${baseUrl}/votacion/papeleta?access_token=${params.magicToken}`;
 
-  const htmlContent = `
-    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 16px; overflow: hidden; background-color: #ffffff;">
-      <div style="background-color: #0b5294; color: #ffffff; padding: 24px; text-align: center;">
-        <h1 style="margin: 0; font-size: 20px; font-weight: 800;">Servicio Local de Educación Pública</h1>
-        <p style="margin: 6px 0 0 0; font-size: 12px; color: #bfdbfe;">Acreditación Electoral Directa • Decreto N° 102</p>
-      </div>
-
-      <div style="padding: 24px; color: #334155; line-height: 1.6;">
-        <p style="font-size: 15px; font-weight: bold; margin-top: 0;">Estimado/a ${params.voterName},</p>
-        <p style="font-size: 13px;">Has completado el proceso de acreditación electoral para el estamento de <strong>${params.estamentoLabel}</strong>.</p>
-        
-        <p style="font-size: 13px; margin: 16px 0;">Para emitir tu voto de forma confidencial en la cabina secreta, haz clic en el siguiente enlace de acceso directo (válido por 10 minutos):</p>
-
-        <div style="text-align: center; margin: 28px 0;">
-          <a href="${baseUrl}/votacion/papeleta?access_token=${params.magicToken}" style="display: inline-block; background-color: #059669; color: #ffffff; text-decoration: none; padding: 16px 32px; border-radius: 12px; font-weight: bold; font-size: 15px; box-shadow: 0 4px 14px rgba(5,150,105,0.35);">🗳️ Ingresar a mi Papeleta de Votación</a>
-        </div>
-
-        <p style="font-size: 11px; color: #64748b; text-align: center;">Este enlace es de uso único y expira automáticamente a los 10 minutos de ser generado.</p>
-      </div>
-
-      <div style="background-color: #f1f5f9; padding: 16px; text-align: center; font-size: 11px; color: #64748b; border-t: 1px solid #e2e8f0;">
-        Mensaje enviado automáticamente desde la casilla institucional ${cfg.casillaEmail}
-      </div>
-    </div>
-  `;
+  const { subject: emailSubject, html: htmlContent } = renderOtpEmailTemplate(electionConfig, {
+    otp: params.otp,
+    voterName: params.voterName,
+    estamentoLabel: params.estamentoLabel,
+    magicLinkUrl,
+    senderEmail: cfg.casillaEmail,
+  });
 
   if (cfg.useSimulation) {
     console.log(`[SIMULACIÓN M365 GRAPH API] Correo enviado a ${params.toEmail} | OTP: ${params.otp} | Magic: ${params.magicToken}`);
@@ -304,7 +289,7 @@ export async function sendOtpEmailViaGraph(params: {
     const graphMailUrl = `https://graph.microsoft.com/v1.0/users/${cfg.casillaEmail}/sendMail`;
     const mailPayload = {
       message: {
-        subject: `Código de Acreditación Electoral SLEP: ${params.otp}`,
+        subject: emailSubject,
         body: {
           contentType: 'HTML',
           content: htmlContent,

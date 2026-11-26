@@ -1,13 +1,27 @@
 import type { Metadata } from 'next';
 import { headers } from 'next/headers';
 
+import { getElectionConfigAsync } from '@/lib/election-config-store';
 import './globals.css';
 
-export const metadata: Metadata = {
-  title: 'Portal de Votacion | Consejo Local SLEP',
-  description: 'Frontend modular del Portal de Votacion del Consejo Local SLEP.',
-  robots: { index: false, follow: false },
-};
+export async function generateMetadata(): Promise<Metadata> {
+  try {
+    const config = await getElectionConfigAsync();
+    const titulo = config.tituloProceso?.trim() || 'Portal de Votación';
+    const institucion = config.nombreInstitucion?.trim() || 'Plataforma Electoral';
+    return {
+      title: `${titulo} | ${institucion}`,
+      description: `Portal oficial de votación digital — ${titulo} (${institucion}).`,
+      robots: { index: false, follow: false },
+    };
+  } catch {
+    return {
+      title: 'Portal de Votación Digital',
+      description: 'Plataforma modular de votación digital.',
+      robots: { index: false, follow: false },
+    };
+  }
+}
 
 interface RootLayoutProps {
   children: React.ReactNode;
