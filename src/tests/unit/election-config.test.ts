@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
   getElectionConfigAsync,
   saveElectionConfigAsync,
@@ -9,6 +9,18 @@ import {
   parseAllowedDomains,
   type ElectionConfig,
 } from '@/lib/election-config-store';
+
+let originalConfig: ElectionConfig | null = null;
+
+beforeAll(async () => {
+  originalConfig = await getElectionConfigAsync();
+});
+
+afterAll(async () => {
+  if (originalConfig) {
+    await saveElectionConfigAsync(originalConfig);
+  }
+});
 
 describe('election-config-store', () => {
   describe('buildWhatsAppLink helper', () => {

@@ -340,6 +340,7 @@ export function AdminView({
   }
 
   // Election Config State (Pestaña 2: Programación)
+  const [configSubTab, setConfigSubTab] = useState<'general' | 'apariencia' | 'ingreso' | 'correo' | 'soporte'>('general');
   const [electionConfig, setElectionConfig] = useState<ElectionConfig | null>(null);
   const [windowStatus, setWindowStatus] = useState<ElectionStatusCheck | null>(null);
   const [loadingConfig, setLoadingConfig] = useState(false);
@@ -635,6 +636,62 @@ export function AdminView({
   const [formCandBiografia, setFormCandBiografia] = useState('');
   const [formCandPropuesta, setFormCandPropuesta] = useState('');
   const [formCandFoto, setFormCandFoto] = useState('');
+  const [uploadingCandFoto, setUploadingCandFoto] = useState(false);
+
+  async function compressImageToDataUrl(file: File, maxSize = 400, quality = 0.82): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onerror = () => reject(new Error('No se pudo leer el archivo de imagen.'));
+      reader.onload = () => {
+        const img = new Image();
+        img.onerror = () => reject(new Error('El archivo seleccionado no es una imagen válida.'));
+        img.onload = () => {
+          const scale = Math.min(1, maxSize / Math.max(img.width, img.height));
+          const width = Math.max(1, Math.round(img.width * scale));
+          const height = Math.max(1, Math.round(img.height * scale));
+          const canvas = document.createElement('canvas');
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) {
+            resolve(String(reader.result));
+            return;
+          }
+          ctx.drawImage(img, 0, 0, width, height);
+          const dataUrl = canvas.toDataURL('image/webp', quality);
+          resolve(dataUrl.startsWith('data:image/webp') ? dataUrl : canvas.toDataURL('image/jpeg', quality));
+        };
+        img.src = String(reader.result);
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+
+  async function handleCandFotoUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setCandError(null);
+    setUploadingCandFoto(true);
+    try {
+      const dataUrl = await compressImageToDataUrl(file, 400, 0.82);
+      const res = await fetch('/api/admin/upload-image', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ dataUrl, folder: 'candidates' }),
+        credentials: 'same-origin',
+      });
+      const data = (await res.json()) as { url?: string; message?: string };
+      if (!res.ok || !data.url) {
+        throw new Error(data.message || 'No se pudo subir la imagen.');
+      }
+      setFormCandFoto(data.url);
+    } catch (err) {
+      setCandError(err instanceof Error ? err.message : 'Error al procesar la imagen.');
+    } finally {
+      setUploadingCandFoto(false);
+      e.target.value = '';
+    }
+  }
 
 
   // Modal Eliminación Candidato
@@ -2127,6 +2184,31 @@ az webapp config appsettings set --resource-group rg-slep-elecciones --name vota
               </div>
             )}
 
+            {/* Sub-pestañas de Configuración */}
+            <div className="flex flex-wrap gap-2 bg-white p-2 rounded-2xl border border-slate-200 shadow-sm">
+              {[
+                { id: 'general' as const, label: '📅 General y Estamentos' },
+                { id: 'apariencia' as const, label: '🎨 Marca y Apariencia' },
+                { id: 'ingreso' as const, label: '🚪 Página de Ingreso' },
+                { id: 'correo' as const, label: '📧 Correo OTP' },
+                { id: 'soporte' as const, label: '📞 Mesa de Ayuda' },
+              ].map((tab) => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setConfigSubTab(tab.id)}
+                  className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+                    configSubTab === tab.id
+                      ? 'bg-[#0b5294] text-white shadow-sm'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+
+            {configSubTab === 'general' && (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               {/* Card 1: Selección de Estamentos Habilitados */}
               <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
@@ -2269,8 +2351,10 @@ az webapp config appsettings set --resource-group rg-slep-elecciones --name vota
                 </div>
               </div>
             </div>
+            )}
 
             {/* Card 3: Personalización de Apariencia e Imagen Institucional */}
+            {configSubTab === 'apariencia' && (
             <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-6">
               <div className="border-b pb-3 border-slate-100 flex flex-wrap items-center justify-between gap-2">
                 <h3 className="font-serif font-bold text-sm text-slate-900 flex items-center gap-2">
@@ -2438,8 +2522,10 @@ az webapp config appsettings set --resource-group rg-slep-elecciones --name vota
                 </div>
               </div>
             </div>
+            )}
 
             {/* Card 4: Mesa de Ayuda y Canales de Soporte al Votante */}
+            {configSubTab === 'soporte' && (
             <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-6">
               <div className="border-b pb-3 border-slate-100 flex flex-wrap items-center justify-between gap-3">
                 <div className="flex items-center gap-2.5">
@@ -2643,8 +2729,10 @@ az webapp config appsettings set --resource-group rg-slep-elecciones --name vota
                 </button>
               </div>
             </div>
+            )}
 
             {/* Card 5: Editor de Plantilla de Correo OTP y Acreditación */}
+            {configSubTab === 'correo' && (
             <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-6">
               <div className="border-b pb-3 border-slate-100 flex flex-wrap items-center justify-between gap-3">
                 <div className="flex items-center gap-2.5">
@@ -2832,8 +2920,10 @@ az webapp config appsettings set --resource-group rg-slep-elecciones --name vota
                 </div>
               </div>
             </div>
+            )}
 
             {/* Card 6: Personalización de Página de Ingreso a la Votación */}
+            {configSubTab === 'ingreso' && (
             <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-6">
               <div className="border-b pb-3 border-slate-100 flex flex-wrap items-center justify-between gap-3">
                 <div className="flex items-center gap-2.5">
@@ -3088,6 +3178,7 @@ az webapp config appsettings set --resource-group rg-slep-elecciones --name vota
                 </button>
               </div>
             </div>
+            )}
           </div>
         )}
 
@@ -4308,16 +4399,39 @@ CMD ["npm", "start"]`}
                 />
               </label>
 
-              <label className="grid gap-1 font-bold text-slate-700">
-                <span>URL Foto de Perfil (Opcional)</span>
+              <div className="grid gap-2 font-bold text-slate-700">
+                <div className="flex items-center justify-between">
+                  <span>Foto de Perfil del Candidato (Opcional)</span>
+                  {formCandFoto ? (
+                    <button
+                      type="button"
+                      onClick={() => setFormCandFoto('')}
+                      className="text-[11px] text-red-600 font-bold hover:underline"
+                    >
+                      Quitar foto
+                    </button>
+                  ) : null}
+                </div>
+
+                <label className="flex items-center justify-center gap-2 h-10 px-4 rounded-xl border border-dashed border-[#0b5294]/40 bg-blue-50/60 hover:bg-blue-50 text-[#0b5294] text-xs font-bold cursor-pointer transition">
+                  <span>{uploadingCandFoto ? '⏳ Subiendo y optimizando...' : '📷 Subir imagen desde tu computador'}</span>
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp,image/gif"
+                    className="sr-only"
+                    disabled={uploadingCandFoto}
+                    onChange={handleCandFotoUpload}
+                  />
+                </label>
+
                 <input
                   type="url"
-                  className="h-10 px-3 rounded-xl border border-slate-300 font-mono text-xs"
-                  placeholder="https://..."
+                  className="h-9 px-3 rounded-xl border border-slate-300 font-mono text-[11px] font-normal"
+                  placeholder="O pega una URL externa (https://...)"
                   value={formCandFoto}
                   onChange={(e) => setFormCandFoto(e.target.value)}
                 />
-              </label>
+              </div>
 
               {formCandFoto ? (
                 <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl border border-slate-200">
@@ -4326,9 +4440,6 @@ CMD ["npm", "start"]`}
                     src={formCandFoto}
                     alt="Vista previa"
                     className="w-12 h-12 rounded-full object-cover border shrink-0"
-                    onError={(e) => {
-                      (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80';
-                    }}
                   />
                   <span className="text-[11px] text-slate-500 font-medium">Vista previa de la foto de perfil</span>
                 </div>

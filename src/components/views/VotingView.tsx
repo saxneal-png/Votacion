@@ -81,6 +81,7 @@ export function VotingView({
   onSubmitVote,
 }: VotingViewProps) {
   const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [failedPhotoIds, setFailedPhotoIds] = useState<Record<string, boolean>>({});
   const confirmButtonRef = useRef<HTMLButtonElement | null>(null);
   const cancelButtonRef = useRef<HTMLButtonElement | null>(null);
   const modalPanelRef = useRef<HTMLDivElement | null>(null);
@@ -215,9 +216,19 @@ export function VotingView({
               style={{ ['--accent' as string]: candidate.accentColor }}
             >
               <div className="flex items-center justify-between gap-2">
-                <span className="candidate-badge inline-grid place-items-center w-11 h-11 rounded-full text-[15px]">
-                  {candidate.initials}
-                </span>
+                {candidate.fotoPerfil && !failedPhotoIds[candidate.id] ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={candidate.fotoPerfil}
+                    alt={candidate.nombreCompleto || candidate.name}
+                    className="w-12 h-12 rounded-full object-cover border-2 border-slate-200 shrink-0 shadow-xs"
+                    onError={() => setFailedPhotoIds((prev) => ({ ...prev, [candidate.id]: true }))}
+                  />
+                ) : (
+                  <span className="candidate-badge inline-grid place-items-center w-11 h-11 rounded-full text-[15px]">
+                    {candidate.initials}
+                  </span>
+                )}
                 {candidate.numero ? (
                   <span className="inline-flex items-center justify-center px-2.5 py-0.5 rounded-full text-xs font-black bg-[#0b5294] text-white shadow-sm tracking-wide">
                     N° {candidate.numero}
